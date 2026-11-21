@@ -1,0 +1,56 @@
+/* Screen changes: 240 ms cross-fade + 12 px rise via the View Transitions API.
+   Transform/opacity only. Under reduced motion withTransition never starts a
+   transition, so these rules are never exercised. */
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-screen);
+  animation-timing-function: var(--ease-standard);
+}
+
+::view-transition-old(root) {
+  animation-name: screen-old;
+}
+
+::view-transition-new(root) {
+  animation-name: screen-new;
+}
+
+@keyframes screen-old {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes screen-new {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Fallback when the View Transitions API is unavailable: a 120 ms fade of the
+   screen body. */
+.screen-fade .app__main {
+  animation: screen-fade 120ms var(--ease-standard);
+}
+
+@keyframes screen-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* One reduced-motion behaviour for every CSS transition in the app (hover,
+   focus, sheets). JS-driven motion checks prefersReducedMotion itself. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
