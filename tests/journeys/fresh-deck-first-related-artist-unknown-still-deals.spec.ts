@@ -47,7 +47,6 @@ test("a fresh Songs deck deals a card when the first related artist is unknown t
         trackName: `Dealt song ${n}`,
         artistName: `Dealt${stamp}`,
         primaryGenreName: "Electronic",
-        previewUrl: `https://audio.example.test/${id}.m4a`,
       }));
     }
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ resultCount: results.length, results }) });

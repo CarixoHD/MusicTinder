@@ -337,7 +337,10 @@ class CoolingUntaggedPrefixCatalog extends FakeCatalog {
     return deezerArtistId === 4101 ? PREFIX_ROSTER : [];
   }
 
-  override async enrichArtist(name: string, options?: LookupOptions) {
+  override async enrichArtist(
+    name: string,
+    options?: LookupOptions,
+  ): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
     const wait = options?.waitForBudget === true;
     this.enrichWaits.push(wait);
     if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
