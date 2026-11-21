@@ -4,7 +4,6 @@ const RELATED_LIMIT = 20;
 const GENRE_ANCHOR_LIMIT = 3;
 const ALBUM_LIMIT = 3;
 const TRACK_LIMIT = 3;
-const CHIP_ENRICH_LIMIT = 5;
 
 interface Anchor {
   /** Artist name used for catalog resolution/enrichment. */
@@ -115,15 +114,20 @@ export async function generateCandidates(
 
   const artists = [...related.values()];
 
-  // 4a. Artist cards: best-effort genre enrichment for the first few.
+  // 4a. Artist cards: Deezer carries no genre, so iTunes supplies it. Every
+  //     card needs one: an artist without chips has no ranking signal and no
+  //     card content. An artist iTunes could not tag stays unseen, and a later
+  //     refill retries it.
   if (cardType === 'artist') {
-    await Promise.all(
-      artists.slice(0, CHIP_ENRICH_LIMIT).map(async (card) => {
+    const tagged = await Promise.all(
+      artists.map(async (card): Promise<Card | undefined> => {
         const enrichment = await attempt(() => catalog.enrichArtist(card.creator));
-        if (enrichment && enrichment.chips.length > 0) card.chips = enrichment.chips;
+        return enrichment && enrichment.chips.length > 0
+          ? { ...card, chips: enrichment.chips }
+          : undefined;
       }),
     );
-    return finish(artists);
+    return finish(tagged.filter((card): card is Card => card !== undefined));
   }
 
   // 4b. Album/song cards: enrich each related artist, then pull its releases,
