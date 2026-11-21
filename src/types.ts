@@ -144,9 +144,17 @@ export interface SampleOptions {
   signal?: AbortSignal;
 }
 
+/** A Deezer artist profile. The search often lists an empty duplicate with the same name first. */
+export interface DeezerArtistRef {
+  id: number;
+  name: string;
+  /** Other profiles with the same name, most fans first; generation tries them if the first has no related artists. */
+  alternatives?: DeezerArtistRef[];
+}
+
 export interface Catalog {
   searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]>;
-  resolveDeezerArtist(name: string): Promise<{ id: number; name: string } | null>;
+  resolveDeezerArtist(name: string): Promise<DeezerArtistRef | null>;
   relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]>;
   enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
   artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]>;

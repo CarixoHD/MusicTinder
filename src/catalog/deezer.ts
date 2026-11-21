@@ -1,4 +1,4 @@
-import type { Card } from '../types';
+import type { Card, DeezerArtistRef } from '../types';
 import { jsonp } from './deezerJsonp';
 
 /** Deezer public API over the quarantined JSONP transport (ADR-002). */
@@ -10,6 +10,7 @@ interface DeezerArtist {
   id: number;
   name: string;
   picture_big?: string;
+  nb_fan?: number;
 }
 
 interface DeezerList<T> {
@@ -27,21 +28,29 @@ const matchScore = (query: string, name: string): number => {
   return n.includes(q) || q.includes(n) ? 1 : 0;
 };
 
-export async function resolveDeezerArtist(name: string): Promise<{ id: number; name: string } | null> {
+/** Exact name first, then most fans; the sort is stable, so search order breaks remaining ties. */
+const byMatchThenFans = (query: string) => (a: DeezerArtist, b: DeezerArtist) =>
+  matchScore(query, b.name) - matchScore(query, a.name) || (b.nb_fan ?? 0) - (a.nb_fan ?? 0);
+
+export async function resolveDeezerArtist(name: string): Promise<DeezerArtistRef | null> {
   const payload = await jsonp<DeezerList<DeezerArtist>>(
     `${DEEZER_API}/search/artist?q=${encodeURIComponent(name)}&limit=${SEARCH_LIMIT}`,
   );
 
-  let best: DeezerArtist | null = null;
-  let bestScore = 0;
-  for (const artist of payload.data ?? []) {
-    const score = matchScore(name, artist.name);
-    if (score > bestScore) {
-      best = artist;
-      bestScore = score;
-    }
-  }
-  return best ? { id: best.id, name: best.name } : null;
+  const ranked = (payload.data ?? []).filter((artist) => matchScore(name, artist.name) > 0).sort(byMatchThenFans(name));
+  const best = ranked[0];
+  if (!best) return null;
+
+  // Deezer lists near-empty duplicate profiles ahead of the real artist; keep the
+  // same-name ones ranked by fans so generation can fall back when one deals nothing.
+  const alternatives = ranked
+    .slice(1)
+    .filter((artist) => creatorKey(artist.name) === creatorKey(best.name))
+    .map((artist) => ({ id: artist.id, name: artist.name }));
+
+  return alternatives.length > 0
+    ? { id: best.id, name: best.name, alternatives }
+    : { id: best.id, name: best.name };
 }
 
 export async function relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {

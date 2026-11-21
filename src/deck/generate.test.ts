@@ -26,6 +26,9 @@ const ARTIST_SEEDS: Seed[] = [
 
 const SEED_ARTIST_KEYS = new Set(ARTIST_SEEDS.map((seed) => seed.creatorKey));
 
+/** The same anchors, but resolution has to happen at generation time. */
+const UNRESOLVED_SEEDS: Seed[] = ARTIST_SEEDS.map((seed) => ({ ...seed, deezerArtistId: undefined }));
+
 /**
  * FakeCatalog enriches and looks up only its three anchor artists, but the
  * recommender consumes related artists. This fixture gives each related artist
@@ -165,6 +168,22 @@ class FailingReleasesCatalog extends DeeperCatalog {
   }
 }
 
+/**
+ * The search lists a near-empty duplicate profile (same name, no related
+ * artists) ahead of the real one, as Deezer does for Carpenter Brut/Kavinsky.
+ */
+class DuplicateProfileCatalog extends FakeCatalog {
+  override async resolveDeezerArtist(name: string) {
+    const real = await super.resolveDeezerArtist(name);
+    return real && { id: real.id + 50_000, name: real.name, alternatives: [real] };
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    if (deezerArtistId > 50_000) return [];
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
 /** The catalog answers "nothing there" for every anchor. */
 class NotFoundCatalog extends FakeCatalog {
   override async relatedArtists(): Promise<Card[]> {
@@ -300,6 +319,24 @@ describe('generateCandidates', () => {
     expect(cards.length).toBeGreaterThan(0);
     expect(cards.some((card) => card.related?.includes('north static'))).toBe(false);
     expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('falls back to the next same-name profile when the chosen one has no related artists', async () => {
+    const cards = await generateCandidates(
+      new DuplicateProfileCatalog(),
+      UNRESOLVED_SEEDS.slice(0, 1),
+      'artist',
+      new Set(),
+    );
+
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('deals candidates when every seed resolves to the duplicate-profile shape', async () => {
+    const cards = await generateCandidates(new DuplicateProfileCatalog(), UNRESOLVED_SEEDS, 'artist', new Set());
+
+    expect(new Set(cards.flatMap((card) => card.related ?? [])).size).toBe(2);
   });
 
   it('skips a failing enrichment instead of failing the refill', async () => {

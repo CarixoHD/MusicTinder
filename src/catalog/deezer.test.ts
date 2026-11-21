@@ -173,6 +173,44 @@ describe('resolveDeezerArtist', () => {
     expect(srcs[0]).toContain('/search/artist?q=daft%20punk');
   });
 
+  it('picks the same-name profile with the most fans, listing the rest as alternatives', async () => {
+    serveScripts(() => ({
+      data: [
+        { id: 414858642, name: 'Carpenter Brut', nb_fan: 6 },
+        { id: 4346304, name: 'Carpenter Brut', nb_fan: 84217 },
+        { id: 7, name: 'Carpenter Brut Tribute', nb_fan: 900000 },
+      ],
+    }));
+
+    expect(await resolveDeezerArtist('Carpenter Brut')).toEqual({
+      id: 4346304,
+      name: 'Carpenter Brut',
+      alternatives: [{ id: 414858642, name: 'Carpenter Brut' }],
+    });
+  });
+
+  it('keeps an exact name match ahead of a partial one with more fans', async () => {
+    serveScripts(() => ({
+      data: [
+        { id: 1, name: 'Kavinsky Tribute Band', nb_fan: 900000 },
+        { id: 13358, name: 'Kavinsky', nb_fan: 500000 },
+      ],
+    }));
+
+    expect(await resolveDeezerArtist('kavinsky')).toEqual({ id: 13358, name: 'Kavinsky' });
+  });
+
+  it('keeps the search order when same-name profiles have the same fans', async () => {
+    serveScripts(() => ({
+      data: [
+        { id: 7, name: 'Kavinsky', nb_fan: 100 },
+        { id: 8, name: 'Kavinsky', nb_fan: 100 },
+      ],
+    }));
+
+    expect(await resolveDeezerArtist('Kavinsky')).toMatchObject({ id: 7 });
+  });
+
   it('returns null when the search has no results', async () => {
     serveScripts(() => ({ data: [] }));
 
