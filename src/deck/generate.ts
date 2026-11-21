@@ -44,21 +44,21 @@ export async function generateCandidates(
   let lastError: unknown;
   let networkError: CatalogError | undefined;
 
-  const attempt = async <T>(call: () => Promise<T>): Promise<T | undefined> => {
-    try {
-      return await call();
-    } catch (error) {
-      recordFailure(error);
-      return undefined;
-    }
-  };
-
   const recordFailure = (error: unknown) => {
     // 'notfound' is the catalog answering "nothing there", not an outage.
     if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
       failures += 1;
       lastError = error;
       if (error instanceof CatalogError && error.kind === 'network') networkError = error;
+    }
+  };
+
+  const attempt = async <T>(call: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await call();
+    } catch (error) {
+      recordFailure(error);
+      return undefined;
     }
   };
 
