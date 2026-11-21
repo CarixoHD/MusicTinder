@@ -28,3 +28,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a lower layer changes a 'no result' return into a typed error, use the error kind in the user-facing copy too: a rate cool-down should say to wait a moment, not to check the connection.
 - (milestone review) When you change a layout cap that an earlier issue added for another reason (e.g. keeping controls clear of the tab bar), re-check that reason at short viewports (1280x600/720, 360x640) and pin it in e2e.
 - (milestone review) Layout fixes that promise 'the same size on every card' should be tested by swiping several cards with different text lengths and comparing sizes, not by measuring the first card alone.
+- (milestone review) A journey that pins a ranking 'lean' must place the disliked items where raw catalogue order would deal them inside the asserted window, so the assertion fails when taste has no effect.
+- (milestone review) When a change adds iTunes lookups to the refill path, check what the shared budget leaves for just-in-time samples and whether a sample request that hits the cool-down is ever retried.
