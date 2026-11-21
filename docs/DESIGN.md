@@ -84,9 +84,12 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   bar. At viewport heights ≤ 840 px a compact density budgets
   `calc(100svh - 342px)`: 8 px main top padding, 4 px deck gap, 4 px stack
   margin, and a card with 10 px sides, 8 px top and bottom and 4 px row gaps.
-  That keeps the card large (≈378 px at 1280 × 720) while a two-line title still
+  That keeps the card large (≈376 px at 1280 × 720) while a two-line title still
   leaves the buttons visible; above 840 px the full-width card has room for the
-  untrimmed card.
+  untrimmed card. Below 620 px the budget tightens once more
+  (`calc(100svh - 376px)`) because a year + release type + the longest genre tag
+  wrap to a second meta row there; the compact mode also tightens the meta row
+  gap to 4 px.
 - One screen visible at a time; two-tab bottom bar (Discover, Liked) in `--bg-glass`.
   Settings is a sheet reachable from the header only. Content never sits under chrome:
   pad with the nav's height. Setup belongs to the Discover tab: while the user
@@ -106,7 +109,8 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   or the Deezer album count when the artist has only one genre, so a genre is
   never printed twice), year + album release type + ≤ 2 chips (`text-meta`;
   Apple's ` - Single` / ` - EP` suffix is stripped from the title and becomes the
-  release-type tag), the quiet `because you like X` line in
+  release-type tag), the quiet `because you like X` line on one line (ellipsis
+  when it does not fit) in
   `--text-tertiary`. Play/pause as a 48 px glass circle overlapping the artwork's
   lower-right corner; sound state shown by icon **and** a 2 px progress ring around
   the circle (`--text-primary` at 0.9 over the glass, hairline track), never colour

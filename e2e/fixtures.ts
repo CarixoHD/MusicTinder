@@ -410,7 +410,9 @@ export async function mockLongAlbumTitles(page: Page): Promise<void> {
             collectionName: `An Extraordinarily Long Album Title Number ${artistId} - Single`,
             artistId,
             artistName: 'The BossHoss',
-            primaryGenreName: 'Country',
+            // The longest curated genre label: forces the meta row to budget
+            // its second line on very short viewports.
+            primaryGenreName: 'Singer-songwriter',
             releaseDate: '2024-04-05T00:00:00Z',
             collectionViewUrl: `https://music.apple.com/album/${artistId * 10 + 1}`,
           },

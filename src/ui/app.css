@@ -775,11 +775,16 @@ button {
   font-weight: var(--text-meta-weight);
 }
 
+/* One line: a long seed name truncates instead of growing the card and
+   pushing the like/skip controls toward the tab bar. */
 .card__because {
   margin: 0;
+  overflow: hidden;
   color: var(--text-tertiary);
   font-size: var(--text-meta-size);
   line-height: var(--text-meta-line);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Settings sheet */
