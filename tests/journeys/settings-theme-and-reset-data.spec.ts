@@ -6,7 +6,10 @@ test("listener picks a theme that survives reload, and resets all data only afte
     const u = new URL(route.request().url());
     if (u.hostname.includes("deezer")) {
       const cb = u.searchParams.get("callback");
-      return route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify({ data: [] })})` });
+      const data = u.pathname.includes("/search")
+        ? { data: [{ id: stamp, name: `${u.searchParams.get("q")} Band` }] }
+        : { data: [] };
+      return route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
     }
     const term = u.searchParams.get("term") ?? "";
     const results = u.searchParams.get("entity") === "musicArtist" && term.startsWith("Reset")

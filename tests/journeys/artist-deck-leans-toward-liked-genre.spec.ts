@@ -85,7 +85,7 @@ test("on an Artists deck, liking Jazz and skipping Metal tags every card and lea
     // outnumbers Metal so the lean stays observable across 12 cards within the
     // iTunes budget, which only tags the head of the list.
     const data = url.pathname.includes("/search")
-      ? { data: [{ id: relatedId, name: url.searchParams.get("q") }] }
+      ? { data: [{ id: relatedId, name: `${url.searchParams.get("q")} Band` }] }
       : { data: related };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${callback}(${JSON.stringify(data)})` });
   });

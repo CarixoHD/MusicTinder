@@ -24,7 +24,7 @@ test("in dark mode, every artist card shows a genre tag; liked artists open in S
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 8 }, () => { const d = ++id; return { id: d, name: `Rel${d}` }; }) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

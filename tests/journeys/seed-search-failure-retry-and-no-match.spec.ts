@@ -12,6 +12,20 @@ test("seed search explains a catalog failure inline, retries, and flags no match
       : [{ wrapperType: "artist", artistType: "Artist", artistName: `${term} Band`, artistId: stamp, primaryGenreName: "Jazz" }];
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ resultCount: results.length, results }) });
   });
+  // Artist search is Deezer-first: the blip and the answers come from here. A
+  // Deezer "error" payload is how the typed JSONP failure reaches the app.
+  await page.route(/api\.deezer\.com/, async (route) => {
+    const u = new URL(route.request().url());
+    const cb = u.searchParams.get("callback");
+    const payload = fail
+      ? { error: { type: "DataException", message: "quota", code: 4 } }
+      : {
+          data: (u.searchParams.get("q") ?? "").startsWith("Nothing")
+            ? []
+            : [{ id: stamp, name: `${u.searchParams.get("q")} Band` }],
+        };
+    await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(payload)})` });
+  });
 
   await page.goto("/");
   const box = page.getByRole("searchbox", { name: "Search artists" });
