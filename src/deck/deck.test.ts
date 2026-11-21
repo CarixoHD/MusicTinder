@@ -97,6 +97,38 @@ class FlakyCatalog extends FixedCatalog {
   }
 }
 
+const FAR_SHORE: Card = {
+  key: 'dz:artist:6002',
+  kind: 'artist',
+  source: 'deezer',
+  title: 'Far Shore',
+  creator: 'Far Shore',
+  creatorKey: 'far shore',
+  image: 'https://cdn.example.test/artists/6002.jpg',
+  chips: ['dance'],
+};
+
+/**
+ * Glass Harbour is only reachable through Ada Vale; its own profile opens Far
+ * Shore. Liking it anywhere in the deck must make that second hop dealable.
+ */
+class SecondHopCatalog extends FakeCatalog {
+  override async resolveDeezerArtist(name: string) {
+    return name.trim().toLowerCase() === 'glass harbour' ? { id: 5101, name } : super.resolveDeezerArtist(name);
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    if (deezerArtistId === 5101) return [FAR_SHORE];
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+
+  override async enrichArtist(name: string) {
+    return name.trim().toLowerCase() === FAR_SHORE.creatorKey
+      ? { itunesArtistId: 6002, chips: FAR_SHORE.chips }
+      : super.enrichArtist(name);
+  }
+}
+
 const controlledCards = (): Card[] => [
   artistCard(1, 'rock'),
   artistCard(2, 'jazz'),
@@ -198,6 +230,64 @@ describe('deck refill', () => {
     expect(state.pool).toEqual([]);
     expect(state.status).toBe('empty');
     expect(state.emptyReason).toBe('filtered');
+  });
+
+  it('requests related artists for an artist liked this deck, and deals the second hop', async () => {
+    const catalog = new SecondHopCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ADA],
+      cardType: 'artist',
+      taste: initTaste([ADA]),
+    });
+    await deck.refill();
+
+    const dealt = new Set<string>();
+    while (deck.state.pool[0] && deck.state.pool[0].creatorKey !== 'glass harbour') {
+      const card = deck.state.pool[0];
+      dealt.add(card.key);
+      deck.commit({ card, reaction: 'skip', elapsedMs: 100 });
+    }
+    const liked = deck.state.pool[0];
+    expect(liked.creatorKey).toBe('glass harbour');
+    dealt.add(liked.key);
+    deck.commit({ card: liked, reaction: 'like', elapsedMs: 9000 });
+
+    const spy = vi.spyOn(catalog, 'relatedArtists');
+    const state = await deck.refill();
+
+    expect(spy.mock.calls.map(([deezerArtistId]) => deezerArtistId)).toContain(5101);
+    expect(state.pool.some((card) => card.key === FAR_SHORE.key)).toBe(true);
+    // The liked anchor, the seed and everything already seen stay out of the deck.
+    expect(
+      state.pool.some(
+        (card) => card.creatorKey === 'glass harbour' || card.creatorKey === 'ada vale' || dealt.has(card.key),
+      ),
+    ).toBe(false);
+  });
+
+  it('uses the artist behind a liked album as an anchor on the next refill', async () => {
+    const catalog = new SecondHopCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ADA],
+      cardType: 'album',
+      taste: initTaste([ADA]),
+    });
+    await deck.refill();
+
+    while (deck.state.pool[0] && deck.state.pool[0].creatorKey !== 'glass harbour') {
+      deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    }
+    const liked = deck.state.pool[0];
+    expect(liked.kind).toBe('album');
+    deck.commit({ card: liked, reaction: 'like', elapsedMs: 9000 });
+
+    const spy = vi.spyOn(catalog, 'relatedArtists');
+    await deck.refill();
+
+    // Liking an album expands its creator, not the album itself.
+    expect(spy.mock.calls.map(([deezerArtistId]) => deezerArtistId)).toContain(5101);
   });
 
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {

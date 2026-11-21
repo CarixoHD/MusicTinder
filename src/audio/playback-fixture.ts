@@ -111,26 +111,35 @@ export async function mockPlaybackCatalog(page: Page): Promise<void> {
 
   await page.route('https://api.deezer.com/**', async (route) => {
     const url = new URL(route.request().url());
-    if (!/^\/artist\/4101\/related$/.test(url.pathname)) {
-      throw new Error(`playback fixture: unmatched Deezer request ${url.pathname}${url.search}`);
-    }
-    const payload = {
-      data: ARTISTS.map((artist) => ({
+    const callback = url.searchParams.get('callback') ?? 'callback';
+    const artistPayload = (artists: readonly Artist[]) => ({
+      data: artists.map((artist) => ({
         id: artist.deezerId,
         name: artist.name,
+        nb_fan: 1000,
         picture_medium: artwork(artist.deezerId),
         picture_big: artwork(artist.deezerId),
       })),
-    };
-    const callback = url.searchParams.get('callback') ?? 'callback';
-    await route.fulfill({
-      status: 200,
-      headers: {
-        'content-type': 'application/javascript; charset=utf-8',
-        'access-control-allow-origin': '*',
-      },
-      body: `${callback}(${JSON.stringify(payload)});`,
     });
+    const reply = async (payload: { data: unknown[] }) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'application/javascript; charset=utf-8',
+          'access-control-allow-origin': '*',
+        },
+        body: `${callback}(${JSON.stringify(payload)});`,
+      });
+
+    // Liking a card searches its creator so the next refill can expand it.
+    if (url.pathname === '/search/artist') {
+      const term = (url.searchParams.get('q') ?? '').toLowerCase();
+      return reply(artistPayload(ARTISTS.filter((artist) => artist.name.toLowerCase() === term)));
+    }
+    const related = /^\/artist\/(\d+)\/related$/.exec(url.pathname);
+    if (!related) throw new Error(`playback fixture: unmatched Deezer request ${url.pathname}${url.search}`);
+    // Only the seed's related list deals artists; a liked artist's second hop is empty.
+    return reply(artistPayload(Number(related[1]) === 4101 ? ARTISTS : []));
   });
 
   await page.route('https://audio.example.test/**', async (route) => {
