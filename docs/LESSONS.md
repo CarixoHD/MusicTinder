@@ -2,10 +2,6 @@
 
 Short lessons from building this product, written by Slopper when work needed fixing. Read them before you start: they save you from mistakes earlier agents made.
 
-- (#7) Tests here must not replace fetch: use MSW (installed as msw 3.0.7). MSW 3 renames the option to `server.listen({ onUnhandledFrame: 'error' })`, and `HttpResponse.json` wants a `Record<string, any>`-compatible body, not `unknown`.
-- (#2) The test-honesty landmine treats vi.spyOn(...).mockResolvedValue on fetch as a test double; catalog network tests must use msw (MSW v3 option is onUnhandledFrame, not onUnhandledRequest).
-- (milestone review) Every iTunes request in src/catalog/ (search included) goes through withItunesBudget and cached(), and maps 403/429 to CatalogError('rate'); a direct fetch bypasses the shared ~17/min budget.
-- (milestone review) The persisted-state read seam must check the shape of each slice (array/object, required fields) and fall back to defaults per slice; checking that JSON.parse succeeds is not enough.
 - (milestone review) Search UIs should drop or visibly mark the previous term's results as soon as the term changes, not only when the next response arrives.
 - (#10) In this shared sandbox, any e2e config must not assume 5173 is free: other worktrees' Playwright/dev servers use it. Derive the port from the worktree path (or honour PORT) rather than using a fixed default.
 - (#12) When a test needs a browser API jsdom lacks (matchMedia), don't stub it: add an explicit parameter backed by a real default and pin the live browser behaviour in Playwright with page.emulateMedia.
@@ -43,3 +39,6 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (design review) Once a card is rendered as top or next, no async refill or re-score may replace it; only the pool behind the visible stack can reorder, or a key press acts on a card the user never saw.
 - (design review) Every image slot (card art, list thumb, seed pill, search result) needs one shared token-coloured fallback with a centred ~24 px glyph, covering both 'no artwork' and onError.
 - Save screenshots to .slopper/evidence/issue-N/ (pass that path as the filename), never the repo root; root images are gitignored.
+- (milestone review) Fakes for catalog adapters must return the fields the real API returns: an iTunes musicArtist search has no artwork, so a fake that adds one hides a dead code path. Check the live response shape (curl) before relying on a field.
+- (milestone review) Bounding a wait must not turn 'not checked because of the cool-down' into 'nothing there': if lookups were refused by the budget, the deck needs a retryable state, not the seed-blaming empty copy.
+- (milestone review) Cadence rules (1 in 6, never two in a row) need a test with a draining pool and skips, not only a stable pool where every card is liked.
