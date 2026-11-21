@@ -8,6 +8,7 @@ interface Anchor {
   name: string;
   itunesId: number;
   deezerId: number;
+  fans: number;
   genre: string;
   related: readonly (readonly [name: string, deezerId: number])[];
 }
@@ -17,6 +18,7 @@ const ANCHORS: readonly Anchor[] = [
     name: 'Ada Vale',
     itunesId: 9101,
     deezerId: 4101,
+    fans: 18_400,
     genre: 'Electronic',
     related: [
       ['Glass Harbour', 5101],
@@ -33,6 +35,7 @@ const ANCHORS: readonly Anchor[] = [
     name: 'North Static',
     itunesId: 9102,
     deezerId: 4102,
+    fans: 9_200,
     genre: 'Indie Rock',
     related: [
       ['Fever Orchard', 5201],
@@ -49,6 +52,7 @@ const ANCHORS: readonly Anchor[] = [
     name: 'Lumen Choir',
     itunesId: 9103,
     deezerId: 4103,
+    fans: 61_000,
     genre: 'R&B/Soul',
     related: [
       ['Velvet Ledger', 5301],
@@ -145,6 +149,7 @@ function deezerSearch(params: URLSearchParams): unknown {
       name: anchor.name,
       picture_medium: artwork(anchor.itunesId),
       picture_big: artwork(anchor.itunesId),
+      nb_fan: anchor.fans,
     })),
   };
 }

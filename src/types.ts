@@ -51,13 +51,26 @@ export interface Seed {
 
 /** A catalog search hit shown in Setup; never persisted until chosen. */
 export interface SeedCandidate {
-  itunesId: number;
+  /** Apple's id; absent for a Deezer fallback artist. */
+  itunesId?: number;
+  /** Deezer's id when the artist came from the Deezer fallback. */
+  deezerArtistId?: number;
   kind: 'artist' | 'album';
   name: string;
   creator: string;
   year?: number;
   image?: string;
   chips: Chip[];
+  /** Deezer fan count, shown in the row so duplicate profiles differ. */
+  fans?: number;
+}
+
+/** How a Setup seed search may wait on the shared iTunes budget. */
+export interface SeedSearchOptions {
+  /** Wait for the next refill during a cool-down instead of failing fast. */
+  wait?: boolean;
+  /** Abandon the wait when the term changes. */
+  signal?: AbortSignal;
 }
 
 export interface Card {
@@ -155,7 +168,11 @@ export interface DeezerArtistRef {
 }
 
 export interface Catalog {
-  searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]>;
+  searchSeeds(
+    term: string,
+    type: 'artist' | 'album',
+    options?: SeedSearchOptions,
+  ): Promise<SeedCandidate[]>;
   resolveDeezerArtist(name: string): Promise<DeezerArtistRef | null>;
   relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]>;
   enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
