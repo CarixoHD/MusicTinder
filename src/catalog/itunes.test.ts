@@ -1,7 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CatalogError } from '../types';
+import { ITUNES_BUDGET, resetItunesBudget, withItunesBudget } from './budget';
 import { searchSeeds } from './itunes';
 
 const ARTWORK_100 = 'https://is1-ssl.mzstatic.com/image/thumb/Music/x/100x100bb.jpg';
@@ -20,8 +21,14 @@ const searchAnswers = (body: Record<string, unknown>) =>
 const server = setupServer();
 
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
+beforeEach(() => {
+  localStorage.clear();
+  vi.useRealTimers();
+  resetItunesBudget();
+});
 afterEach(() => {
   server.resetHandlers();
+  vi.useRealTimers();
   requested = null;
 });
 afterAll(() => server.close());
@@ -145,5 +152,67 @@ describe('searchSeeds', () => {
       name: 'CatalogError',
       kind: 'network',
     });
+  });
+
+  it('rejects with a rate CatalogError when Apple answers 403 or 429', async () => {
+    server.use(http.get(SEARCH, () => new HttpResponse(null, { status: 429 })));
+    await expect(searchSeeds('ada', 'artist')).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'rate',
+    });
+
+    server.use(http.get(SEARCH, () => new HttpResponse(null, { status: 403 })));
+    await expect(searchSeeds('north', 'artist')).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'rate',
+    });
+  });
+
+  it('serves a repeated search from the 24 h cache without another request', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    const urls: string[] = [];
+    server.use(
+      http.get(SEARCH, ({ request }) => {
+        urls.push(request.url);
+        return HttpResponse.json({
+          resultCount: 1,
+          results: [{ artistId: 7, artistName: 'Real One' }],
+        });
+      }),
+    );
+
+    const first = await searchSeeds('ada', 'artist');
+    vi.setSystemTime(new Date('2027-01-01T23:00:00Z'));
+    const second = await searchSeeds('ada', 'artist');
+
+    expect(second).toEqual(first);
+    expect(urls).toHaveLength(1);
+
+    vi.setSystemTime(new Date('2027-01-02T01:00:00Z'));
+    await searchSeeds('ada', 'artist');
+    expect(urls).toHaveLength(2);
+  });
+
+  it('spends the shared iTunes budget and rejects as rate while it cools down', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    const urls: string[] = [];
+    server.use(
+      http.get(SEARCH, ({ request }) => {
+        urls.push(request.url);
+        return HttpResponse.json({ resultCount: 0, results: [] });
+      }),
+    );
+
+    for (let token = 0; token < ITUNES_BUDGET; token += 1) {
+      await withItunesBudget(null, async () => null);
+    }
+
+    await expect(searchSeeds('ada', 'artist')).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'rate',
+    });
+    expect(urls).toHaveLength(0);
   });
 });
