@@ -56,26 +56,36 @@ const swipe = async (page: Page, key: 'ArrowRight' | 'ArrowLeft'): Promise<strin
   return before;
 };
 
+/**
+ * Pulls both catalog hosts at the network layer; the returned switch cuts them
+ * (true) or restores the fixture routes (false).
+ */
+async function switchableCatalog(page: Page): Promise<(down: boolean) => void> {
+  let down = false;
+  await page.route('**/*', (route) => {
+    const host = new URL(route.request().url()).host;
+    if (down && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
+      return route.abort('failed');
+    }
+    return route.fallback();
+  });
+  return (next) => {
+    down = next;
+  };
+}
+
 test('a refill failure after the first deal keeps dealt cards swipeable with an inline Retry', async ({
   page,
 }) => {
   await mockCatalog(page, { enrichRelatedArtists: true });
   await seedDeck(page);
-
-  let catalogDown = false;
-  await page.route('**/*', (route) => {
-    const host = new URL(route.request().url()).host;
-    if (catalogDown && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
-      return route.abort('failed');
-    }
-    return route.fallback();
-  });
+  const setCatalogDown = await switchableCatalog(page);
 
   await page.goto('/');
   await expect(deckTitle(page)).toHaveText(/\S/);
 
   // The network dies after the deck has dealt cards.
-  catalogDown = true;
+  setCatalogDown(true);
 
   await swipe(page, 'ArrowRight');
   await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
@@ -99,7 +109,7 @@ test('a refill failure after the first deal keeps dealt cards swipeable with an 
   expect(await page.locator('.deck__upcoming .card').count()).toBeLessThan(3);
 
   // Restoring the catalog and pressing Retry runs a real refill and clears the row.
-  catalogDown = false;
+  setCatalogDown(false);
   const refillRequest = page.waitForRequest((request) =>
     request.url().includes('api.deezer.com/artist/4101/related'),
   );
@@ -117,15 +127,8 @@ test('a first refill failure explains itself inline and Retry deals once the cat
 }) => {
   await mockCatalog(page, { enrichRelatedArtists: true });
   await seedDeck(page);
-
-  let catalogDown = true;
-  await page.route('**/*', (route) => {
-    const host = new URL(route.request().url()).host;
-    if (catalogDown && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
-      return route.abort('failed');
-    }
-    return route.fallback();
-  });
+  const setCatalogDown = await switchableCatalog(page);
+  setCatalogDown(true);
 
   await page.goto('/');
 
@@ -133,7 +136,7 @@ test('a first refill failure explains itself inline and Retry deals once the cat
   await expect(page.getByRole('heading', { name: 'Your deck is getting ready' })).toHaveCount(0);
   await expect(page.locator('.deck__current')).toHaveCount(0);
 
-  catalogDown = false;
+  setCatalogDown(false);
   await page.getByRole('button', { name: 'Retry' }).click();
 
   await expect(deckTitle(page)).toHaveText(/\S/);
@@ -143,23 +146,15 @@ test('a first refill failure explains itself inline and Retry deals once the cat
 test('going back online retries the refill without a tap', async ({ page }) => {
   await mockCatalog(page, { enrichRelatedArtists: true });
   await seedDeck(page);
-
-  let catalogDown = false;
-  await page.route('**/*', (route) => {
-    const host = new URL(route.request().url()).host;
-    if (catalogDown && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
-      return route.abort('failed');
-    }
-    return route.fallback();
-  });
+  const setCatalogDown = await switchableCatalog(page);
 
   await page.goto('/');
   await expect(deckTitle(page)).toHaveText(/\S/);
-  catalogDown = true;
+  setCatalogDown(true);
   await swipe(page, 'ArrowRight');
   await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
 
-  catalogDown = false;
+  setCatalogDown(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
 
   await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);

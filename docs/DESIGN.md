@@ -52,7 +52,7 @@ separate palette.
 | `--like` | `--accent` | `--accent` |
 | `--danger` | `#e5654f` | `#b3402c` (unused in v1 interactions; reset only) |
 
-Every text token clears WCAG AA (>= 4.5:1) against both `--bg-canvas` and
+Every text token clears WCAG AA (≥ 4.5:1) against both `--bg-canvas` and
 `--bg-elevated` in dark and light, so 13 px meta text is never decoration.
 
 The accent (a quiet iris) is the single non-neutral tint: liked state, active chip,
