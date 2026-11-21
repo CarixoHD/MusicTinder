@@ -1,10 +1,15 @@
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createCatalog } from '../../catalog';
+import { ITUNES_BUDGET, resetItunesBudget, withItunesBudget } from '../../catalog/budget';
 import { useStore } from '../../store/store';
 import { FakeCatalog } from '../../testkit/fakeCatalog';
 import {
   CatalogError,
+  type Catalog,
   type SeedCandidate,
   type SeedSearchOptions,
 } from '../../types';
@@ -78,6 +83,10 @@ class ScriptedCatalog extends FakeCatalog {
   }
 }
 
+const SEARCH = 'https://itunes.apple.com/search';
+
+const server = setupServer();
+
 const deferred = <T,>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -89,7 +98,7 @@ const deferred = <T,>() => {
 let container: HTMLDivElement;
 let root: Root;
 
-const mount = async (catalog: ScriptedCatalog, type: 'artist' | 'album' = 'artist') => {
+const mount = async (catalog: Catalog, type: 'artist' | 'album' = 'artist') => {
   await act(async () => {
     root.render(<SeedSearch type={type} catalog={catalog} />);
   });
@@ -125,11 +134,13 @@ const button = (name: RegExp): HTMLButtonElement | null =>
 const status = (): string | null =>
   container.querySelector('[role="status"]')?.textContent ?? null;
 
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
   localStorage.clear();
+  resetItunesBudget();
   useStore.setState({ seeds: [] });
   container = document.createElement('div');
   document.body.append(container);
@@ -139,8 +150,10 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  server.resetHandlers();
   vi.useRealTimers();
 });
+afterAll(() => server.close());
 
 describe('SeedSearch', () => {
   it('searches once per ~400 ms pause and never for a term under two characters', async () => {
@@ -234,6 +247,30 @@ describe('SeedSearch', () => {
 
     expect(button(/Ada Vale No\. 1/)).not.toBeNull();
     expect(container.textContent).not.toContain('Apple is limiting searches right now');
+  });
+
+  it('holds the searching row through an empty iTunes budget and shows results after a refill', async () => {
+    server.use(
+      http.get(SEARCH, () =>
+        HttpResponse.json({
+          resultCount: 1,
+          results: [{ artistId: 9101, artistName: 'Ada Vale', primaryGenreName: 'Electronic' }],
+        }),
+      ),
+    );
+    for (let token = 0; token < ITUNES_BUDGET; token += 1) {
+      await withItunesBudget(null, async () => null);
+    }
+
+    await mount(createCatalog());
+    await typeTerm('ada');
+    await advance(400);
+    expect(status()).toContain('Searching');
+    expect(container.textContent).not.toContain('Apple is limiting searches');
+
+    await advance(4_000);
+    expect(button(/Ada Vale/)).not.toBeNull();
+    expect(container.textContent).not.toContain('Apple is limiting searches');
   });
 
   it('abandons the pending wait when the term changes', async () => {

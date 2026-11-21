@@ -104,9 +104,12 @@ test('cold start to a saved like survives a reload with seeds and taste intact',
   expect(externalRequests).toEqual([]);
 });
 
-test('Setup searches that drain the iTunes budget leave a retry, not a seeds problem', async ({
-  page,
-}) => {
+test('an iTunes cool-down at deal time leaves a retry, not a seeds problem', async ({ page }) => {
+  // The seed search answers; every later iTunes request is refused, so the
+  // albums deck's enrichment is cooling down by the time it deals.
+  await mockCatalog(page, {
+    search: (_params, call) => (call > 1 ? { status: 429 } : undefined),
+  });
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
 
@@ -116,16 +119,6 @@ test('Setup searches that drain the iTunes budget leave a retry, not a seeds pro
   await search.fill('ada');
   await page.getByRole('button', { name: /Ada Vale/ }).click();
   await expect(page.getByRole('button', { name: 'Remove Ada Vale No. 1' })).toBeVisible();
-
-  // Drain what the seed search left: wait for each answer until Setup itself
-  // reports that Apple is limiting searches.
-  const limited = page.getByText('Apple is limiting searches right now');
-  for (let n = 0; n < 40; n += 1) {
-    await search.fill(`zz ${n}`);
-    await expect(limited.or(page.getByText(`No match for ‘zz ${n}’`))).toBeVisible();
-    if (await limited.isVisible()) break;
-  }
-  await expect(limited).toBeVisible();
 
   await page.getByRole('button', { name: 'Start discovering' }).click();
 
