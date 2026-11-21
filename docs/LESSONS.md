@@ -21,3 +21,4 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) State kept outside React (module-level sessions, caches) must be cleared by resetAll() and must never feed values back into the store after a reset.
 - (milestone review) A component that adopts a long-lived object across mounts must subscribe to its changes (or re-join its pending promise); a .then() bound to the mount that started the work leaves later mounts stale.
 - (milestone review) Test session/retention features with work still in flight at the moment of leaving and returning, not only when everything has already settled.
+- (milestone review) When a wipe has to invalidate state held outside React, a runtime epoch in the store that the session key includes is a simple, testable way to do it; also guard any effect that writes data back into the store against output from an older epoch.
