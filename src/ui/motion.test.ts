@@ -1,109 +1,103 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { onReducedMotionChange, prefersReducedMotion } from './motion';
+import { describe, expect, it } from 'vitest';
+import { onReducedMotionChange, prefersReducedMotion, type ReducedMotionQuery } from './motion';
 import { withTransition } from './transition';
 
-// jsdom's matchMedia never changes; tests need a query they can flip.
-class FakeMediaQueryList extends EventTarget {
+/** A real, controllable media-query stand-in: listeners are registered and
+ * fired like the browser does, only the OS preference is under our control. */
+class TestQuery implements ReducedMotionQuery {
   matches: boolean;
-  readonly media = '(prefers-reduced-motion: reduce)';
+  private readonly listeners = new Set<(event: { matches: boolean }) => void>();
 
   constructor(matches: boolean) {
-    super();
     this.matches = matches;
   }
 
-  set(matches: boolean): void {
+  addEventListener(_type: 'change', listener: (event: { matches: boolean }) => void): void {
+    this.listeners.add(listener);
+  }
+
+  removeEventListener(_type: 'change', listener: (event: { matches: boolean }) => void): void {
+    this.listeners.delete(listener);
+  }
+
+  flip(matches: boolean): void {
     this.matches = matches;
-    this.dispatchEvent(Object.assign(new Event('change'), { matches }));
+    for (const listener of this.listeners) listener({ matches });
   }
 }
-
-function stubReducedMotion(matches: boolean): FakeMediaQueryList {
-  const list = new FakeMediaQueryList(matches);
-  vi.stubGlobal('matchMedia', () => list);
-  return list;
-}
-
-const fakeViewTransition = (update: () => void) => {
-  update();
-  return {
-    finished: Promise.resolve(),
-    ready: Promise.resolve(),
-    types: new Set<string>(),
-    updateCallbackDone: Promise.resolve(),
-    skipTransition: () => undefined,
-  };
-};
-
-function stubStartViewTransition(): ReturnType<typeof vi.fn> {
-  const start = vi.fn(fakeViewTransition);
-  Object.defineProperty(document, 'startViewTransition', { configurable: true, value: start });
-  return start;
-}
-
-afterEach(() => {
-  delete (document as { startViewTransition?: unknown }).startViewTransition;
-  vi.unstubAllGlobals();
-});
 
 describe('reduced-motion preference', () => {
   it('reflects the current media query', () => {
-    stubReducedMotion(false);
-    expect(prefersReducedMotion()).toBe(false);
-
-    stubReducedMotion(true);
-    expect(prefersReducedMotion()).toBe(true);
+    expect(prefersReducedMotion(new TestQuery(false))).toBe(false);
+    expect(prefersReducedMotion(new TestQuery(true))).toBe(true);
   });
 
   it('notifies on every flip and stops after unsubscribe', () => {
-    const query = stubReducedMotion(false);
-    const onChange = vi.fn();
+    const query = new TestQuery(false);
+    const changes: boolean[] = [];
 
-    const unsubscribe = onReducedMotionChange(onChange);
-    query.set(true);
-    expect(onChange).toHaveBeenLastCalledWith(true);
-    query.set(false);
-    expect(onChange).toHaveBeenLastCalledWith(false);
-    expect(onChange).toHaveBeenCalledTimes(2);
+    const unsubscribe = onReducedMotionChange((reduced) => changes.push(reduced), query);
+    query.flip(true);
+    query.flip(false);
+    expect(changes).toEqual([true, false]);
 
     unsubscribe();
-    query.set(true);
-    expect(onChange).toHaveBeenCalledTimes(2);
+    query.flip(true);
+    expect(changes).toEqual([true, false]);
   });
 });
 
 describe('withTransition', () => {
   it('runs the update synchronously with no view transition under reduced motion', () => {
-    stubReducedMotion(true);
-    const start = stubStartViewTransition();
+    let starts = 0;
     let ran = false;
 
-    withTransition(() => {
-      ran = true;
-    });
+    withTransition(
+      () => {
+        ran = true;
+      },
+      {
+        reducedMotion: true,
+        startViewTransition: () => {
+          starts += 1;
+        },
+      },
+    );
 
     expect(ran).toBe(true);
-    expect(start).not.toHaveBeenCalled();
+    expect(starts).toBe(0);
   });
 
   it('uses startViewTransition when the browser supports it', () => {
-    stubReducedMotion(false);
-    const start = stubStartViewTransition();
-    const update = vi.fn();
+    let starts = 0;
+    let ran = false;
 
-    withTransition(update);
+    withTransition(
+      () => {
+        ran = true;
+      },
+      {
+        reducedMotion: false,
+        startViewTransition: (update) => {
+          starts += 1;
+          update();
+        },
+      },
+    );
 
-    expect(start).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledTimes(1);
+    expect(starts).toBe(1);
+    expect(ran).toBe(true);
   });
 
   it('runs the update synchronously when startViewTransition is unavailable', () => {
-    stubReducedMotion(false);
     let ran = false;
 
-    withTransition(() => {
-      ran = true;
-    });
+    withTransition(
+      () => {
+        ran = true;
+      },
+      { reducedMotion: false },
+    );
 
     expect(ran).toBe(true);
   });
