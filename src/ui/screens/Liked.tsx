@@ -57,10 +57,11 @@ function Thumb({ item }: { item: LikedItem }) {
 }
 
 function LikedRow({ item, musicApp, index }: { item: LikedItem; musicApp: MusicApp; index: number }) {
-  // The artist name is the title, so repeat it once: as what it is plus its genre.
-  const secondary = [KIND_LABEL[item.kind], item.chips[0] && chipLabel(item.chips[0])]
-    .filter(Boolean)
-    .join(' · ');
+  // An artist's title is its own name, so name the genre instead; an album or
+  // song title does not name its creator, so show that (genre only if missing).
+  const genre = item.chips[0] && chipLabel(item.chips[0]);
+  const detail = item.kind === 'artist' ? genre : item.creator || genre;
+  const secondary = [KIND_LABEL[item.kind], detail].filter(Boolean).join(' · ');
 
   return (
     <li className="liked-row-item" style={{ animationDelay: `${index * 30}ms` }}>
