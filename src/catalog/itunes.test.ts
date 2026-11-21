@@ -9,6 +9,38 @@ const ARTWORK_100 = 'https://is1-ssl.mzstatic.com/image/thumb/Music/x/100x100bb.
 const ARTWORK_600 = 'https://is1-ssl.mzstatic.com/image/thumb/Music/x/600x600bb.jpg';
 const SEARCH = 'https://itunes.apple.com/search';
 
+const observers: MutationObserver[] = [];
+
+/** Plays the Deezer CDN: answers the real JSONP script with `reply`. */
+function serveScripts(reply: () => unknown): { srcs: string[] } {
+  const srcs: string[] = [];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLScriptElement)) continue;
+        srcs.push(node.src);
+        const callback = new URL(node.src).searchParams.get('callback') ?? '';
+        queueMicrotask(() => {
+          const handler = (window as unknown as Record<string, unknown>)[callback];
+          if (typeof handler === 'function') (handler as (payload: unknown) => void)(reply());
+        });
+      }
+    }
+  });
+  observer.observe(document.head, { childList: true });
+  observers.push(observer);
+  return { srcs };
+}
+
+const ONE_TOKEN_MS = Math.ceil(60_000 / ITUNES_BUDGET) + 100;
+
+/** Spend the bucket down to nothing, so the next search must wait. */
+async function coolDown(): Promise<void> {
+  for (let token = 0; token < ITUNES_BUDGET; token += 1) {
+    await withItunesBudget(null, async () => null);
+  }
+}
+
 let requested: URL | null = null;
 
 /** Answers the real search URL with fixture JSON, recording what was asked. */
@@ -30,6 +62,7 @@ afterEach(() => {
   server.resetHandlers();
   vi.useRealTimers();
   requested = null;
+  for (const observer of observers.splice(0)) observer.disconnect();
 });
 afterAll(() => server.close());
 
@@ -214,5 +247,97 @@ describe('searchSeeds', () => {
       kind: 'rate',
     });
     expect(urls).toHaveLength(0);
+  });
+
+  it('waits for the next refill when Setup passes { wait: true } instead of failing fast', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    const urls: string[] = [];
+    server.use(
+      http.get(SEARCH, ({ request }) => {
+        urls.push(request.url);
+        return HttpResponse.json({
+          resultCount: 1,
+          results: [{ artistId: 7, artistName: 'Real One' }],
+        });
+      }),
+    );
+    await coolDown();
+
+    const pending = searchSeeds('ada', 'artist', { wait: true });
+    await vi.advanceTimersByTimeAsync(ONE_TOKEN_MS - 150);
+    expect(urls).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(200);
+    await expect(pending).resolves.toMatchObject([{ itunesId: 7 }]);
+    expect(urls).toHaveLength(1);
+  });
+
+  it('abandons a waiting Setup search when the term changes, asking neither catalog', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    server.use(searchAnswers({ resultCount: 0, results: [] }));
+    const { srcs } = serveScripts(() => ({ data: [] }));
+    await coolDown();
+    const controller = new AbortController();
+
+    const pending = searchSeeds('ada', 'artist', { wait: true, signal: controller.signal });
+    const assertion = expect(pending).rejects.toMatchObject({ kind: 'rate' });
+    controller.abort();
+    await assertion;
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(requested).toBeNull();
+    expect(srcs).toHaveLength(0);
+  });
+
+  it('falls back to Deezer for an artist search Apple refuses, keeping fan counts', async () => {
+    server.use(http.get(SEARCH, () => new HttpResponse(null, { status: 429 })));
+    const { srcs } = serveScripts(() => ({
+      data: [
+        {
+          id: 4346304,
+          name: 'Carpenter Brut',
+          picture_medium: 'https://cdn-images.dzcdn.net/artist/4346304/250x250.jpg',
+          nb_fan: 84_217,
+        },
+        { id: 414858642, name: 'Carpenter Brut', nb_fan: 6 },
+      ],
+    }));
+
+    const candidates = await searchSeeds('Carpenter Brut', 'artist', { wait: true });
+
+    expect(srcs[0]).toContain('/search/artist?q=Carpenter%20Brut');
+    expect(candidates).toEqual([
+      {
+        deezerArtistId: 4346304,
+        kind: 'artist',
+        name: 'Carpenter Brut',
+        creator: 'Carpenter Brut',
+        image: 'https://cdn-images.dzcdn.net/artist/4346304/250x250.jpg',
+        chips: ['other'],
+        fans: 84_217,
+      },
+      {
+        deezerArtistId: 414858642,
+        kind: 'artist',
+        name: 'Carpenter Brut',
+        creator: 'Carpenter Brut',
+        image: undefined,
+        chips: ['other'],
+        fans: 6,
+      },
+    ]);
+  });
+
+  it('keeps album searches fail-fast: a refused request shows the rate error, no Deezer call', async () => {
+    server.use(http.get(SEARCH, () => new HttpResponse(null, { status: 429 })));
+    const { srcs } = serveScripts(() => ({ data: [{ id: 1, name: 'Ada Vale' }] }));
+
+    await expect(searchSeeds('ada', 'album', { wait: true })).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'rate',
+    });
+    expect(srcs).toHaveLength(0);
   });
 });
