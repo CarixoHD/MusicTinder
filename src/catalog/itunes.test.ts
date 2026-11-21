@@ -11,7 +11,7 @@ const SEARCH = 'https://itunes.apple.com/search';
 let requested: URL | null = null;
 
 /** Answers the real search URL with fixture JSON, recording what was asked. */
-const searchAnswers = (body: unknown) =>
+const searchAnswers = (body: Record<string, unknown>) =>
   http.get(SEARCH, ({ request }) => {
     requested = new URL(request.url);
     return HttpResponse.json(body);
@@ -19,7 +19,7 @@ const searchAnswers = (body: unknown) =>
 
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   requested = null;
@@ -32,11 +32,13 @@ describe('searchSeeds', () => {
 
     await searchSeeds('  Ada Vale ', 'artist');
 
-    expect(requested?.origin + requested?.pathname).toBe(SEARCH);
-    expect(requested?.searchParams.get('term')).toBe('Ada Vale');
-    expect(requested?.searchParams.get('media')).toBe('music');
-    expect(requested?.searchParams.get('entity')).toBe('musicArtist');
-    expect(requested?.searchParams.get('limit')).toBe('8');
+    const url = requested;
+    if (url === null) throw new Error('search was never requested');
+    expect(`${url.origin}${url.pathname}`).toBe(SEARCH);
+    expect(url.searchParams.get('term')).toBe('Ada Vale');
+    expect(url.searchParams.get('media')).toBe('music');
+    expect(url.searchParams.get('entity')).toBe('musicArtist');
+    expect(url.searchParams.get('limit')).toBe('8');
   });
 
   it('asks iTunes for albums when the type is album', async () => {
