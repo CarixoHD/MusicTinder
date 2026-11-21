@@ -44,7 +44,7 @@ describe('buildLink', () => {
   it('falls back to an Apple Music search when the snapshot has no entity URL', () => {
     expect(buildLink(artist, 'apple')).toBe('https://music.apple.com/us/search?term=Ada%20Vale');
 
-    const { appleUrl: _unused, ...withoutEntity } = song;
+    const withoutEntity: LinkItem = { kind: 'song', title: 'Night Bus', creator: 'Ada Vale' };
     expect(buildLink(withoutEntity, 'apple')).toBe(
       'https://music.apple.com/us/search?term=Night%20Bus%20Ada%20Vale',
     );
