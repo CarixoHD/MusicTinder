@@ -165,9 +165,13 @@ function deezerRelated(deezerArtistId: number): unknown {
 export interface MockCatalogOptions {
   /**
    * Adjust one iTunes /search request before it is answered: delay it (to force
-   * out-of-order responses) or fail it once (to exercise the retry row).
+   * out-of-order responses), fail it once (to exercise the retry row), or answer
+   * with a status such as 429 to exercise the rate-limit copy.
    */
-  search?: (params: URLSearchParams, call: number) => { delayMs?: number; fail?: boolean } | void;
+  search?: (
+    params: URLSearchParams,
+    call: number,
+  ) => { delayMs?: number; fail?: boolean; status?: number } | void;
 }
 
 /**
@@ -186,6 +190,10 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       if (outcome?.delayMs) await new Promise((resolve) => setTimeout(resolve, outcome.delayMs));
       if (outcome?.fail) {
         await route.abort('failed');
+        return;
+      }
+      if (outcome?.status) {
+        await route.fulfill({ status: outcome.status, body: '' });
         return;
       }
       payload = itunesSearch(url.searchParams);

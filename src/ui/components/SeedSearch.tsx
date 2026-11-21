@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createCatalog } from '../../catalog';
 import { chipLabel } from '../../chips';
 import { useStore } from '../../store/store';
-import type { Seed, SeedCandidate } from '../../types';
+import { CatalogError, type CatalogErrorKind, type Seed, type SeedCandidate } from '../../types';
 import { Button } from '../Button';
 import { ArtworkPlaceholder } from '../icons';
 
@@ -14,7 +14,7 @@ type SearchState =
   | { status: 'loading' }
   | { status: 'results'; candidates: SeedCandidate[] }
   | { status: 'empty'; term: string }
-  | { status: 'error'; term: string };
+  | { status: 'error'; term: string; kind: CatalogErrorKind };
 
 const seedFrom = (candidate: SeedCandidate): Seed => ({
   id: `it:${candidate.kind}:${candidate.itunesId}`,
@@ -57,9 +57,10 @@ export function SeedSearch({ type }: SeedSearchProps) {
             candidates.length > 0 ? { status: 'results', candidates } : { status: 'empty', term },
           );
         },
-        () => {
+        (error: unknown) => {
           if (current !== sequence.current) return;
-          setSearch({ status: 'error', term });
+          const kind = error instanceof CatalogError ? error.kind : 'unknown';
+          setSearch({ status: 'error', term, kind });
         },
       );
     }, DEBOUNCE_MS);
@@ -132,7 +133,9 @@ export function SeedSearch({ type }: SeedSearchProps) {
 
       {view.status === 'error' && (
         <div className="search-flag search-flag--error" role="alert">
-          <span>Couldn&apos;t reach the catalog</span>
+          <span>
+            {view.kind === 'rate' ? 'Apple is limiting searches right now' : "Couldn't reach the catalog"}
+          </span>
           <Button variant="secondary" onClick={() => setAttempt((count) => count + 1)}>
             Retry
           </Button>

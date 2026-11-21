@@ -41,9 +41,13 @@ test('the album picker stores an album seed with its collection id', async ({ pa
   ]);
 });
 
-test('an older response never overwrites results for the latest term', async ({ page }) => {
+test('an in-flight response for an older term never renders under the latest term', async ({
+  page,
+}) => {
+  // Searches share the serialised iTunes budget, so "ada" answers first and
+  // "north" answers seconds later: the stale "ada" answer must not render.
   await mockCatalog(page, {
-    search: (params) => (params.get('term') === 'ada' ? { delayMs: 800 } : undefined),
+    search: (params) => (params.get('term') === 'ada' ? { delayMs: 800 } : { delayMs: 6_000 }),
   });
   await page.goto('/');
 
@@ -52,16 +56,15 @@ test('an older response never overwrites results for the latest term', async ({ 
   await page.waitForRequest(
     (request) => request.url().includes('itunes.apple.com/search') && request.url().includes('term=ada'),
   );
-
-  await input.fill('north');
-  await expect(page.getByRole('button', { name: /North Static/ })).toBeVisible();
-
-  // The slow answer for "ada" lands after "north" was shown: it must be ignored.
-  await page.waitForResponse(
+  const slowAda = page.waitForResponse(
     (response) => response.url().includes('itunes.apple.com/search') && response.url().includes('term=ada'),
   );
-  await expect(page.getByRole('button', { name: /North Static/ })).toBeVisible();
+
+  await input.fill('north');
+
+  await slowAda;
   await expect(page.getByRole('button', { name: /Ada Vale/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /North Static/ })).toBeVisible({ timeout: 10_000 });
 });
 
 test('a term with no hits shows an inline no-match row', async ({ page }) => {
@@ -86,6 +89,23 @@ test('a failed search explains itself inline and Retry runs it again', async ({ 
 
   await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
   await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
+});
+
+test('a rate-limited search says Apple is limiting searches, and Retry runs it again', async ({
+  page,
+}) => {
+  await mockCatalog(page, {
+    search: (_params, call) => (call === 1 ? { status: 429 } : undefined),
+  });
+  await page.goto('/');
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+
+  await expect(page.getByText('Apple is limiting searches right now')).toBeVisible();
+  await page.getByRole('button', { name: 'Retry' }).click();
+
+  await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
+  await expect(page.getByText('Apple is limiting searches right now')).toBeHidden();
 });
 
 test('a genre chip toggles its seed and styles itself with the accent', async ({ page }) => {
