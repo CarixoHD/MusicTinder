@@ -125,6 +125,35 @@ class SilentSongCatalog extends LateCatalog {
   }
 }
 
+/** A catalog whose first lookup fails when the test says, like a short blip. */
+class ManualBlipCatalog extends FakeCatalog {
+  readonly calls: string[] = [];
+  alwaysFail = false;
+  private first = true;
+  private rejecter: (() => void) | null = null;
+
+  override async samplePreview(card: Card): Promise<Sample | undefined> {
+    this.calls.push(card.key);
+    if (this.first) {
+      this.first = false;
+      return new Promise((_, reject) => {
+        this.rejecter = () => reject(new CatalogError('network'));
+      });
+    }
+    if (this.alwaysFail) throw new CatalogError('network');
+    return super.samplePreview(card);
+  }
+
+  blip(): void {
+    if (!this.rejecter) throw new Error('no sample lookup is pending');
+    this.rejecter();
+  }
+
+  callsFor(key: string): number {
+    return this.calls.filter((call) => call === key).length;
+  }
+}
+
 /** A catalog whose lookups fail once, like a transient network error. */
 class FlakyCatalog extends FakeCatalog {
   readonly calls: string[] = [];
@@ -181,6 +210,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   act(() => root.unmount());
   vi.useRealTimers();
   previewPlayer().stop();
@@ -299,27 +329,59 @@ describe('Discovery sample previews', () => {
     expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
   });
 
-  it('retries a failed lookup with backoff and shows No sample after the last attempt', async () => {
+  it('asks a failed lookup again on its own, without waiting for the online event', async () => {
+    const catalog = new ManualBlipCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0];
+    expect(current().textContent).toContain('Finding sample');
+
     vi.useFakeTimers();
-    const catalog = new FlakyCatalog();
+    try {
+      await act(async () => {
+        catalog.blip();
+        await Promise.resolve();
+      });
+      expect(current().textContent).toContain('Finding sample');
+
+      // The backoff timer asks again; the catalog answers this time.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+
+      expect(catalog.callsFor(key)).toBe(2);
+      expect(current().textContent).not.toContain('Finding sample');
+      expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('settles on No sample after repeated failures instead of loading forever', async () => {
+    const catalog = new ManualBlipCatalog();
     await renderDeck('artist', catalog);
     const key = catalog.calls[0];
 
-    expect(catalog.callsFor(key)).toBe(1);
-    expect(current().textContent).toContain('Finding sample');
+    vi.useFakeTimers();
+    try {
+      catalog.alwaysFail = true;
+      await act(async () => {
+        catalog.blip();
+        await Promise.resolve();
+      });
 
-    await advance(1_000);
-    expect(catalog.callsFor(key)).toBe(2);
+      // Every retry fails too: after the last backoff the card stops loading.
+      for (const delay of [1000, 2000, 4000, 8000]) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(delay);
+        });
+      }
 
-    await advance(3_000);
-    expect(catalog.callsFor(key)).toBe(3);
-    expect(current().textContent).toContain('No sample');
-    expect(current().textContent).not.toContain('Finding sample');
-    expect(playButton()).toBeNull();
-
-    // Bounded: no further attempts until something changes.
-    await advance(60_000);
-    expect(catalog.callsFor(key)).toBe(3);
+      expect(catalog.callsFor(key)).toBeGreaterThan(1);
+      expect(current().textContent).toContain('No sample');
+      expect(current().textContent).not.toContain('Finding sample');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('asks a given-up lookup again when the network returns', async () => {
@@ -328,9 +390,9 @@ describe('Discovery sample previews', () => {
     await renderDeck('artist', catalog);
     const key = catalog.calls[0];
 
-    await advance(1_000);
-    await advance(3_000);
+    for (const delay of [1_000, 2_000, 4_000, 8_000]) await advance(delay);
     expect(current().textContent).toContain('No sample');
+    expect(catalog.callsFor(key)).toBe(5);
 
     catalog.fail = false;
     await act(async () => {
@@ -339,7 +401,7 @@ describe('Discovery sample previews', () => {
     await flush();
     await flush();
 
-    expect(catalog.callsFor(key)).toBe(4);
+    expect(catalog.callsFor(key)).toBe(6);
     expect(current().textContent).not.toContain('No sample');
     expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
   });
