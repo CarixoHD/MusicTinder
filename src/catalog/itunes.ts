@@ -1,7 +1,13 @@
 import { normalizeGenre } from '../chips';
-import { CatalogError, type Chip, type SeedCandidate } from '../types';
+import {
+  CatalogError,
+  type Chip,
+  type SeedCandidate,
+  type SeedSearchOptions,
+} from '../types';
 import { withItunesBudget } from './budget';
 import { cached } from './cache';
+import { searchDeezerArtists } from './deezerSeeds';
 
 const SEARCH_URL = 'https://itunes.apple.com/search';
 const SEED_LIMIT = 8;
@@ -69,27 +75,50 @@ async function fetchSearch(url: URL, term: string): Promise<SeedCandidate[]> {
 /**
  * Artist/album seed search against the iTunes Search API (CORS `*`).
  * Responses are cached for 24 h and every request spends one token from the
- * shared budget; with no token left the search fails fast as a rate error so
- * Setup can say Apple is limiting searches instead of "no match".
+ * shared budget. Without options a search fails fast as a rate error, which is
+ * what generation's genre anchors want. Setup passes `wait` so it holds its
+ * loading state through a cool-down; an artist search Apple then refuses (or
+ * one that never gets a token) falls back to Deezer's artist search.
  */
 export async function searchSeeds(
   term: string,
   type: 'artist' | 'album',
+  options: SeedSearchOptions = {},
 ): Promise<SeedCandidate[]> {
+  const trimmed = term.trim();
   const url = new URL(SEARCH_URL);
-  url.searchParams.set('term', term.trim());
+  url.searchParams.set('term', trimmed);
   url.searchParams.set('media', 'music');
   url.searchParams.set('entity', type === 'artist' ? 'musicArtist' : 'album');
   url.searchParams.set('limit', String(SEED_LIMIT));
 
-  const candidates = await cached(url.toString(), () =>
-    withItunesBudget<SeedCandidate[] | null>(null, async () => {
-      const results = await fetchSearch(url, term.trim());
-      return results
-        .map((item) => toCandidate(item, type))
-        .filter((candidate): candidate is SeedCandidate => candidate !== null);
-    }),
-  );
-  if (candidates === null) throw new CatalogError('rate', 'iTunes search is cooling down');
-  return candidates;
+  // An abandoned wait belongs to a term nobody wants any more: ask nobody.
+  const wantsFallback = options.wait === true && type === 'artist';
+  const canFallBack = () => wantsFallback && options.signal?.aborted !== true;
+
+  let candidates: SeedCandidate[] | null;
+  try {
+    candidates = await cached(url.toString(), () =>
+      withItunesBudget<SeedCandidate[] | null>(
+        null,
+        async () => {
+          const results = await fetchSearch(url, trimmed);
+          return results
+            .map((item) => toCandidate(item, type))
+            .filter((candidate): candidate is SeedCandidate => candidate !== null);
+        },
+        { wait: options.wait ?? false, priority: options.wait ?? false, signal: options.signal },
+      ),
+    );
+  } catch (error) {
+    if (canFallBack() && error instanceof CatalogError && error.kind === 'rate') {
+      return searchDeezerArtists(trimmed);
+    }
+    throw error;
+  }
+
+  if (candidates !== null) return candidates;
+  // No token after the wait (Setup abandoned it, or the bucket was reset).
+  if (canFallBack()) return searchDeezerArtists(trimmed);
+  throw new CatalogError('rate', 'iTunes search is cooling down');
 }

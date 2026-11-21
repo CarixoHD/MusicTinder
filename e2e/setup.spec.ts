@@ -116,21 +116,41 @@ test('a failed search explains itself inline and Retry runs it again', async ({ 
   await expect(page.getByText("Couldn’t reach the catalog")).toBeHidden();
 });
 
-test('a rate-limited search says Apple is limiting searches, and Retry runs it again', async ({
+test('a rate-limited album search says Apple is limiting searches, and Retry runs it again', async ({
   page,
 }) => {
   await mockCatalog(page, {
     search: (_params, call) => (call === 1 ? { status: 429 } : undefined),
   });
   await page.goto('/');
+  await page.getByRole('button', { name: 'Albums' }).click();
 
-  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+  await page.getByRole('searchbox', { name: 'Search albums' }).fill('ada');
 
   await expect(page.getByText('Apple is limiting searches right now')).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
 
-  await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ada Vale No\. 1/ })).toBeVisible();
   await expect(page.getByText('Apple is limiting searches right now')).toBeHidden();
+});
+
+test('an artist search Apple refuses falls back to Deezer and stores a Deezer seed', async ({
+  page,
+}) => {
+  await mockCatalog(page, { search: () => ({ status: 429 }) });
+  await page.goto('/');
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+
+  const result = page.getByRole('button', { name: /Ada Vale/ });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText('18k fans');
+  await result.click();
+
+  await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
+  expect(await storedSeeds(page)).toMatchObject([
+    { id: 'dz:artist:4101', kind: 'artist', name: 'Ada Vale', deezerArtistId: 4101 },
+  ]);
 });
 
 test('a genre chip toggles its seed and styles itself with the accent', async ({ page }) => {
