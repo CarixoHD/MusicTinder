@@ -30,7 +30,7 @@ const current = (): HTMLElement => {
 
 const playButton = (): HTMLButtonElement | null => current().querySelector('button.play-button');
 
-/** The reserved sample line: `null` when the card has none, '' when it is empty. */
+/** The sample line; `null` when the card shows none. */
 const sampleLine = (): string | null =>
   current().querySelector('.card__sample')?.textContent ?? null;
 
@@ -225,7 +225,7 @@ describe('Discovery sample previews', () => {
     await flush();
 
     expect(current().textContent).toContain('No sample');
-    expect(sampleLine()).toBe('');
+    expect(sampleLine()).toBeNull();
     expect(catalog.callsFor(upcomingKey)).toBe(1);
   });
 });

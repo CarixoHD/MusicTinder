@@ -36,18 +36,18 @@ export function Card({ card }: { card: CardModel }) {
         <div className="card__play-slot">
           <PlayButton card={card} />
         </div>
+        {/* Beside the play control, over the artwork: naming the sample adds no
+            card height, so the deck's like/skip buttons never move. A song card
+            is its own sample. */}
+        {card.kind !== 'song' && card.sampleTitle && (
+          <p className="card__sample">♪ Sample: {card.sampleTitle}</p>
+        )}
       </div>
 
       <h2 className={`card__title${card.title.length > LONG_TITLE ? ' card__title--long' : ''}`}>
         {card.title}
       </h2>
       <p className="card__creator">{secondary}</p>
-
-      {/* The line is reserved on artist/album cards so a resolving sample never
-          pushes the controls below it. A song card is its own sample. */}
-      {card.kind !== 'song' && (
-        <p className="card__sample">{card.sampleTitle ? `♪ Sample: ${card.sampleTitle}` : ''}</p>
-      )}
 
       <div className="card__meta">
         {card.year !== undefined && <span className="card__year">{card.year}</span>}
