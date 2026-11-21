@@ -8,3 +8,4 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) Every iTunes request in src/catalog/ (search included) goes through withItunesBudget and cached(), and maps 403/429 to CatalogError('rate'); a direct fetch bypasses the shared ~17/min budget.
 - (milestone review) The persisted-state read seam must check the shape of each slice (array/object, required fields) and fall back to defaults per slice; checking that JSON.parse succeeds is not enough.
 - (milestone review) Search UIs should drop or visibly mark the previous term's results as soon as the term changes, not only when the next response arrives.
+- (#10) In this shared sandbox, any e2e config must not assume 5173 is free: other worktrees' Playwright/dev servers use it. Derive the port from the worktree path (or honour PORT) rather than using a fixed default.

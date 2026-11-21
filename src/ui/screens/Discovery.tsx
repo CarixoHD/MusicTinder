@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { previewPlayer } from '../../audio/player';
 import { createCatalog } from '../../catalog';
 import { createDeck, type DeckState } from '../../deck/deck';
 import { useStore } from '../../store/store';
@@ -53,6 +54,7 @@ export default function Discovery() {
   const taste = useStore((state) => state.taste);
   const seen = useStore((state) => state.seen);
   const cardType = useStore((state) => state.settings.cardType);
+  const sound = useStore((state) => state.settings.sound);
   const setTaste = useStore((state) => state.setTaste);
   const markSeen = useStore((state) => state.markSeen);
   const addLiked = useStore((state) => state.addLiked);
@@ -74,6 +76,7 @@ export default function Discovery() {
   const [state, setState] = useState<DeckState>(deck.state);
   const [loading, setLoading] = useState(true);
   const cardStartedAt = useRef(0);
+  const player = previewPlayer();
 
   useEffect(() => {
     cardStartedAt.current = performance.now();
@@ -109,16 +112,33 @@ export default function Discovery() {
     };
   }, [deck]);
 
+  // Keep the following card's sample warm. The current card loads on its first tap.
+  useEffect(() => {
+    const upcoming = deck.prefetchQueue(state).find((card) => card.previewUrl);
+    if (upcoming) player.preload(upcoming);
+  }, [deck, player, state]);
+
+  // Leaving the deck silences whatever was playing.
+  useEffect(() => () => player.stop(), [player]);
+
   const react = useCallback(
     (reaction: 'like' | 'skip') => {
       const card = deck.state.pool[0];
       if (!card) return;
       const now = performance.now();
-      setState(deck.commit({ card, reaction, elapsedMs: now - cardStartedAt.current }));
+      const next = deck.commit({ card, reaction, elapsedMs: now - cardStartedAt.current });
+      setState(next);
       cardStartedAt.current = now;
+
+      // Sound on: the promoted card starts inside the swipe gesture, which is
+      // what the browser's autoplay policy allows without another tap.
+      const promoted = next.pool[0];
+      if (sound && promoted) player.play(promoted);
+      else player.stop();
+
       if (deck.shouldRefill()) void refill();
     },
-    [deck, refill],
+    [deck, player, refill, sound],
   );
 
   useEffect(() => {

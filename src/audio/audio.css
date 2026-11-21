@@ -1,0 +1,85 @@
+/* Card sample playback: one quiet glass circle over the artwork. */
+
+/* The play slot carries the control; the control owns the glass chrome. */
+.card__art .card__play-slot {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  display: flex;
+  width: auto;
+  height: auto;
+  border: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.play-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.play-button:hover {
+  border-color: var(--border-strong);
+}
+
+.play-button:active {
+  transform: scale(0.94);
+}
+
+.play-button[aria-pressed='true'] {
+  border-color: var(--border-strong);
+}
+
+.play-button__track {
+  position: absolute;
+  right: var(--space-3);
+  bottom: 7px;
+  left: var(--space-3);
+  height: 2px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--border-strong);
+}
+
+.play-button__progress {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+}
+
+/* No-preview cards: a visible, non-interactive "No sample" pill. */
+.play-button--empty {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: auto;
+  height: 32px;
+  padding: 0 var(--space-3);
+  color: var(--text-primary);
+  font-size: var(--text-micro-size);
+  line-height: var(--text-micro-line);
+  font-weight: var(--text-micro-weight);
+  letter-spacing: var(--text-micro-tracking);
+  cursor: default;
+}
+
+.play-button__label {
+  white-space: nowrap;
+}
