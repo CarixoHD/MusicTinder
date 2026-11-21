@@ -1,5 +1,6 @@
 import { LazyMotion, MotionConfig } from 'motion/react';
 import { useEffect, type ComponentType } from 'react';
+import { previewPlayer } from '../audio/player';
 import { useStore, type Screen } from '../store/store';
 import { CloseIcon, DiscoverIcon, LikedIcon, SettingsIcon } from './icons';
 import Discovery from './screens/Discovery';
@@ -26,8 +27,14 @@ export function App() {
   const storageNotice = useStore((state) => state.storageNotice);
   const dismissStorageNotice = useStore((state) => state.dismissStorageNotice);
   const theme = useStore((state) => state.settings.theme);
+  const sound = useStore((state) => state.settings.sound);
 
   useEffect(() => watchTheme(theme), [theme]);
+
+  // Sound off silences whatever is playing now, not only the next card.
+  useEffect(() => {
+    if (!sound) previewPlayer().stop();
+  }, [sound]);
 
   const ScreenView = SCREENS[screen];
 
