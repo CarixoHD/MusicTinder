@@ -9,6 +9,15 @@ const ALPHA = 0.5; // weight of a shared anchor artist (card.related)
 const FAST_SKIP_MS = 5000;
 const FAST_SKIP_FACTOR = 0.5;
 
+// Popularity dampener: mild per-decade penalty so an equally fitting lesser-known
+// artist outranks a famous one. Capped below one like (BETA), so taste fit still
+// dominates a fan-count gap. Cards without a fan count are not dampened at all.
+const POPULARITY_PER_DECADE = 0.05;
+const MAX_POPULARITY_PENALTY = BETA * 0.9;
+
+const popularityPenalty = (fans: number | undefined): number =>
+  fans && fans > 0 ? Math.min(POPULARITY_PER_DECADE * Math.log10(fans), MAX_POPULARITY_PENALTY) : 0;
+
 /** Sentinel in `delta.origins`: the feature had no origin before the reaction. */
 const NO_ORIGIN = '';
 
@@ -134,7 +143,8 @@ export function score(taste: TasteWeights, card: Card): { score: number; because
       undefined,
     );
 
-  return strongest ? { score: total, because: taste.origins[strongest.feature] } : { score: total };
+  const adjusted = total - popularityPenalty(card.fans);
+  return strongest ? { score: adjusted, because: taste.origins[strongest.feature] } : { score: adjusted };
 }
 
 /** Score desc, stable: equal scores keep their incoming order. */
