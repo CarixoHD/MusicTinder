@@ -95,7 +95,8 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   `because you like X` line in `--text-tertiary`. Play/pause as a 48 px glass circle
   overlapping the artwork's lower-right corner; sound state shown by icon **and** a
   2 px progress hairline, never colour alone. Like/skip as two 56 px glass buttons
-  under the card. The next card sits behind at `scale(.96) translateY(10px)`,
+  under the card. The next card sits behind at `scale(.96) translateY(10px)` (origin bottom centre, so
+  its edge peeks 10 px),
   opacity .6, and is promoted to scale 1 as the top card leaves. Dragged state lifts
   with the shadow above. A "no sample" card shows a muted waveform glyph — deliberate,
   not broken.
@@ -113,9 +114,10 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   leading checkmark, so state never relies on hue alone. Multi-select wraps in a grid.
 - **Setup**: one search field preceded by an Artists | Albums scope (radio group), so
   the query never silently changes meaning. Picked seeds appear immediately under the
-  field as removable pills (24 px artwork + name + ×, 8 px gap, wrapping). "Deal me:
-  Artists / Albums / Songs" is the last step, next to a sticky glass footer above the
-  tab bar holding the full-width start button ("Start discovering with N seeds").
+  field as removable pills (24 px artwork + name + ×, 8 px gap, wrapping). A sticky glass
+  footer above the tab bar (1 px top hairline, canvas fill at ≥ 1024 px) holds the last
+  step: "Deal me: Artists / Albums / Songs" on one row, then the full-width 48 px start
+  button ("Start discovering with N seeds").
 - **Search input** (Setup pickers): 52 px, `--bg-subtle`, hairline, results in a
   glass list sheet with 56 px artwork thumbs; unresolved seed → inline flag row in
   `--danger`, not a toast.
