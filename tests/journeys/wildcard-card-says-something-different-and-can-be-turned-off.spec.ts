@@ -8,8 +8,9 @@ test("about one card in six is a Something different wildcard, outside the usual
   const seedName = `Neon${stamp}`;
   const seedDeezerId = 7700000 + (stamp % 1000);
   let id = stamp * 1000;
-  const entity = new Map();
-  const put = (o: Record<string, unknown>) => { const e = { ...o, id: (o.id as number) ?? ++id }; entity.set(String(e.id), e); return e as any; };
+  type Entity = { id: number; kind: "artist" | "song"; name: string; genre: string; artistName?: string; artistId?: number; collectionName?: string; year?: number; songs?: Entity[] };
+  const entity = new Map<string, Entity>();
+  const put = (o: Omit<Entity, "id"> & { id?: number }): Entity => { const e = { ...o, id: o.id ?? ++id }; entity.set(String(e.id), e); return e; };
   const genreOf = (term: string) => {
     const l = term.toLowerCase();
     if (l.includes("hip-hop") || l.includes("hip hop")) return "Hip-Hop";
@@ -23,12 +24,12 @@ test("about one card in six is a Something different wildcard, outside the usual
     for (const e of entity.values()) if (e.kind === "artist" && e.name === name) return e;
     return put({ kind: "artist", name, genre: genreOf(name) });
   };
-  const songsOf = (a: any) => {
+  const songsOf = (a: Entity): Entity[] => {
     if (!a.songs) a.songs = [1, 2, 3].map((n) => put({ kind: "song", name: `${a.name} Song${n}`, genre: a.genre, artistName: a.name, artistId: a.id, collectionName: `${a.name} LP`, year: 2012 }));
     return a.songs;
   };
-  const artistJson = (a: any) => ({ wrapperType: "artist", artistType: "Artist", artistName: a.name, artistId: a.id, primaryGenreName: a.genre });
-  const songJson = (s: any) => ({ wrapperType: "track", kind: "song", trackId: s.id, trackName: s.name, collectionId: s.artistId, collectionName: s.collectionName, artistName: s.artistName, artistId: s.artistId, artworkUrl100: "https://is1-ssl.mzstatic.com/x/100x100bb.jpg", primaryGenreName: s.genre, releaseDate: "2012-01-01T00:00:00Z" });
+  const artistJson = (a: Entity) => ({ wrapperType: "artist", artistType: "Artist", artistName: a.name, artistId: a.id, primaryGenreName: a.genre });
+  const songJson = (s: Entity) => ({ wrapperType: "track", kind: "song", trackId: s.id, trackName: s.name, collectionId: s.artistId, collectionName: s.collectionName, artistName: s.artistName, artistId: s.artistId, artworkUrl100: "https://is1-ssl.mzstatic.com/x/100x100bb.jpg", primaryGenreName: s.genre, releaseDate: "2012-01-01T00:00:00Z" });
 
   await page.addInitScript(([json]) => {
     try { if (!sessionStorage.getItem("primed")) { localStorage.setItem("mt:v1", json); sessionStorage.setItem("primed", "1"); } } catch { /* about:blank */ }
