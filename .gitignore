@@ -9,3 +9,6 @@ __pycache__/
 .env
 .env.*
 .DS_Store
+dev-dist/
+test-results/
+playwright-report/

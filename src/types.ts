@@ -1,0 +1,144 @@
+// Single source of every shared domain type. Modules import from here, never
+// redefine Card/Chip/Seed/Reaction/TasteWeights locally.
+
+/** Curated genre chip ids. Raw catalog genres are mapped onto these by chips.ts. */
+export type Chip =
+  | 'hip-hop'
+  | 'r&b-soul'
+  | 'pop'
+  | 'rock'
+  | 'indie'
+  | 'alternative'
+  | 'electronic'
+  | 'dance'
+  | 'house'
+  | 'techno'
+  | 'metal'
+  | 'punk'
+  | 'jazz'
+  | 'blues'
+  | 'classical'
+  | 'folk'
+  | 'country'
+  | 'singer-songwriter'
+  | 'latin'
+  | 'reggae'
+  | 'world'
+  | 'ambient'
+  | 'soundtrack'
+  | 'funk'
+  | 'gospel'
+  | 'disco'
+  | 'k-pop'
+  | 'afrobeat'
+  | 'experimental'
+  | 'other';
+
+export type CardKind = 'artist' | 'album' | 'song';
+
+export type SeedKind = 'artist' | 'album' | 'genre';
+
+export interface Seed {
+  id: string;
+  kind: SeedKind;
+  name: string;
+  itunesArtistId?: number;
+  deezerArtistId?: number;
+  itunesCollectionId?: number;
+  chips: Chip[];
+  creatorKey?: string;
+}
+
+/** A catalog search hit shown in Setup; never persisted until chosen. */
+export interface SeedCandidate {
+  itunesId: number;
+  kind: 'artist' | 'album';
+  name: string;
+  creator: string;
+  year?: number;
+  image?: string;
+  chips: Chip[];
+}
+
+export interface Card {
+  key: string;
+  kind: CardKind;
+  source: 'itunes' | 'deezer';
+  title: string;
+  creator: string;
+  /** Normalised lower-case artist name so iTunes and Deezer agree. */
+  creatorKey: string;
+  year?: number;
+  image?: string;
+  previewUrl?: string;
+  appleUrl?: string;
+  chips: Chip[];
+  /** creatorKeys of the anchor artists this candidate came from. */
+  related?: string[];
+  /** Display name of the seed/liked item that produced the strongest score. */
+  because?: string;
+}
+
+export interface Reaction {
+  card: Card;
+  reaction: 'like' | 'skip';
+  elapsedMs: number;
+}
+
+export interface TasteWeights {
+  chips: Partial<Record<Chip, number>>;
+  creators: Record<string, number>;
+  /** feature (chip id or creatorKey) -> display name of the seed/liked item behind it. */
+  origins: Record<string, string>;
+}
+
+/** Additive, invertible taste change produced by one reaction. */
+export interface TasteDelta {
+  chips: Partial<Record<Chip, number>>;
+  creators: Record<string, number>;
+  origins: Record<string, string>;
+}
+
+export interface LikedItem {
+  key: string;
+  kind: CardKind;
+  title: string;
+  creator: string;
+  creatorKey: string;
+  year?: number;
+  image?: string;
+  previewUrl?: string;
+  appleUrl?: string;
+  chips: Chip[];
+  because?: string;
+}
+
+export interface Settings {
+  musicApp: 'spotify' | 'apple' | 'ytmusic';
+  sound: boolean;
+  theme: 'system' | 'dark' | 'light';
+  cardType: CardKind;
+}
+
+export type DeckStatus = 'dealing' | 'empty' | 'stalled';
+
+export type CatalogErrorKind = 'network' | 'rate' | 'notfound' | 'unknown';
+
+export class CatalogError extends Error {
+  readonly kind: CatalogErrorKind;
+
+  constructor(kind: CatalogErrorKind, message: string = kind) {
+    super(message);
+    this.name = 'CatalogError';
+    this.kind = kind;
+  }
+}
+
+export interface Catalog {
+  searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]>;
+  resolveDeezerArtist(name: string): Promise<{ id: number; name: string } | null>;
+  relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]>;
+  enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
+  artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]>;
+  artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]>;
+}
