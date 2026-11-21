@@ -70,7 +70,11 @@ export function Card({ card }: { card: CardModel }) {
         ))}
       </div>
 
-      {card.because && <p className="card__because">Because you like {card.because}</p>}
+      {card.wildcard ? (
+        <p className="card__because">Something different</p>
+      ) : (
+        card.because && <p className="card__because">Because you like {card.because}</p>
+      )}
 
       <p className="sr-only" aria-live="polite">
         {spoken}

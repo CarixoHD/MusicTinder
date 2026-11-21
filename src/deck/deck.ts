@@ -1,4 +1,4 @@
-import { applyFeedback, score } from '../taste/taste';
+import { applyFeedback, score, topTasteChips } from '../taste/taste';
 import { DIVERSITY_HISTORY, diversify } from '../taste/diversity';
 import { CatalogError } from '../types';
 import type {
@@ -37,6 +37,8 @@ export interface DeckInit {
   taste: TasteWeights;
   seen?: readonly string[];
   sink?: DeckSink;
+  /** Deal exploration cards; matches settings.wildcards, on by default. */
+  wildcards?: boolean;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface Deck {
   commit: (reaction: Reaction) => DeckState;
   prefetchQueue: (state?: DeckState) => Card[];
   shouldRefill: () => boolean;
+  /** Follows settings.wildcards; queued wildcards drop at the next commit/refill. */
+  setWildcards: (enabled: boolean) => void;
 }
 
 const likedFrom = (card: Card): LikedItem => ({
@@ -79,8 +83,50 @@ const likedFrom = (card: Card): LikedItem => ({
   because: card.because,
 });
 
+/** How many cards since the last wildcard, read from the tail of the deal history. */
+const runSinceWildcard = (cards: readonly Card[]): number => {
+  let run = 0;
+  for (let index = cards.length - 1; index >= 0; index -= 1) {
+    if (cards[index].wildcard) break;
+    run += 1;
+  }
+  return run;
+};
+
+/**
+ * ADR 7 exploration slot: about every sixth dealt card is a wildcard, never two
+ * in a row. `since` counts regulars dealt since the last wildcard, so the
+ * cadence carries across commits and refills.
+ */
+function slotWildcards(regular: readonly Card[], wildcards: readonly Card[], since: number): Card[] {
+  const out: Card[] = [];
+  let run = since;
+  let next = 0;
+  let index = 0;
+  while (index < regular.length) {
+    if (next < wildcards.length && run >= 5) {
+      out.push(wildcards[next]);
+      next += 1;
+      run = 0;
+      continue;
+    }
+    const take = next < wildcards.length ? Math.min(5 - run, regular.length - index) : regular.length - index;
+    out.push(...regular.slice(index, index + take));
+    index += take;
+    run += take;
+  }
+  // A leftover wildcard may follow the last regular, unless that would put two
+  // wildcards back to back with nothing regular between them.
+  for (; next < wildcards.length; next += 1) {
+    if (regular.length > 0 && out[out.length - 1]?.wildcard) break;
+    out.push(wildcards[next]);
+  }
+  return out;
+}
+
 export function createDeck(init: DeckInit): Deck {
   const seen = new Set(init.seen ?? []);
+  let wildcardsOn = init.wildcards ?? false;
   let state: DeckState = {
     pool: [],
     status: 'dealing',
@@ -111,10 +157,31 @@ export function createDeck(init: DeckInit): Deck {
     for (const card of cards) {
       if (!seen.has(card.key) && !unique.has(card.key)) unique.set(card.key, card);
     }
-    const passing = [...unique.values()].filter((card) => score(taste, card).score >= 0);
-    const shown = passing.slice(0, visible);
-    const rest = diversify(taste, passing.slice(shown.length), [...recent, ...shown]);
-    return [...shown, ...rest].map((card) => {
+    const queued = [...unique.values()];
+    // Turning wildcards off drops queued exploration at the next commit/refill;
+    // only the card already on screen stays, since replacing it under the
+    // listener would be worse than showing one last wildcard.
+    const all =
+      wildcardsOn || visible === 0
+        ? queued
+        : queued.filter((card, index) => !card.wildcard || index === 0);
+    // The current card and the prefetched stack are already rendered; a refill
+    // may only reorder what comes after them.
+    const shown = all.slice(0, visible);
+    const shownKeys = new Set(shown.map((card) => card.key));
+    // A wildcard is exempt from the quality floor (it sits outside the taste by
+    // design) but never from seen-exclusion.
+    const wildcards = wildcardsOn
+      ? all.filter((card) => card.wildcard && !shownKeys.has(card.key))
+      : [];
+    const regular = all.filter(
+      (card) => !card.wildcard && !shownKeys.has(card.key) && score(taste, card).score >= 0,
+    );
+    const history = [...recent, ...shown].filter((card) => !card.wildcard);
+    const rest = diversify(taste, regular, history);
+    const ordered = [...shown, ...slotWildcards(rest, wildcards, runSinceWildcard([...recent, ...shown]))];
+    return ordered.map((card) => {
+      if (card.wildcard) return { ...card, because: undefined };
       const because = score(taste, card).because;
       return because ? { ...card, because } : card;
     });
@@ -129,6 +196,8 @@ export function createDeck(init: DeckInit): Deck {
           // A deck with nothing to deal waits out the app's own iTunes
           // cool-down instead of reporting the catalog as unreachable.
           waitForFirstCard: state.pool.length === 0,
+          wildcards: wildcardsOn,
+          topChips: topTasteChips(state.taste),
         });
         // The current card and the prefetched stack are already rendered; a
         // refill may only reorder what comes after them.
@@ -203,5 +272,8 @@ export function createDeck(init: DeckInit): Deck {
       (state.status === 'stalled' ||
         state.swipes >= REFILL_EVERY ||
         state.pool.length < MIN_POOL),
+    setWildcards: (enabled) => {
+      wildcardsOn = enabled;
+    },
   };
 }

@@ -101,6 +101,8 @@ export interface Card {
   albumCount?: number;
   /** Display name of the seed/liked item that produced the strongest score. */
   because?: string;
+  /** An exploration card from outside the listener's top chips: shows "Something different". */
+  wildcard?: boolean;
   /** Song title of the just-in-time sample attached by Discovery, when known. */
   sampleTitle?: string;
   /** Discovery is still waiting on this card's sample lookup: the play slot shows "Finding sample". */

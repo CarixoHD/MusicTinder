@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHIPS } from '../chips';
 import { FakeCatalog } from '../testkit/fakeCatalog';
 import {
   CatalogError,
@@ -7,8 +8,14 @@ import {
   type Chip,
   type LookupOptions,
   type Seed,
+  type SeedCandidate,
 } from '../types';
-import { generateCandidates, LIKED_ANCHOR_LIMIT, WAIT_ARTIST_LIMIT } from './generate';
+import {
+  generateCandidates,
+  LIKED_ANCHOR_LIMIT,
+  WAIT_ARTIST_LIMIT,
+  WILDCARD_ENRICH_LIMIT,
+} from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
   {
@@ -360,6 +367,95 @@ class CoolingUntaggableCatalog extends DeeperCatalog {
     this.enrichWaits.push(wait);
     if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
     return null;
+  }
+}
+
+const TOP_CHIPS: Chip[] = ['electronic', 'ambient', 'indie'];
+
+/** Artists a genre-chip search can find, all outside the listener's top chips. */
+const WILDCARD_HITS: SeedCandidate[] = Array.from({ length: 5 }, (_, index) => ({
+  itunesId: 8500 + index,
+  kind: 'artist' as const,
+  name: `Outside Act ${index + 1}`,
+  creator: `Outside Act ${index + 1}`,
+  image: `https://cdn.example.test/artists/${8500 + index}.jpg`,
+  chips: ['jazz'] as Chip[],
+}));
+
+/** A small related-artist branch on chips the listener already likes. */
+const ON_TASTE_BRANCH: Card[] = [1, 2].map((n) => ({
+  key: `dz:artist:${7100 + n}`,
+  kind: 'artist',
+  source: 'deezer',
+  title: `On Taste ${n}`,
+  creator: `On Taste ${n}`,
+  creatorKey: `on taste ${n}`,
+  image: `https://cdn.example.test/artists/${7100 + n}.jpg`,
+  chips: ['electronic'],
+}));
+
+/**
+ * No related artist falls outside the top chips, so a wildcard has to come
+ * from the genre search; counts the searches and the enrichment each costs.
+ */
+class WildcardCatalog implements Catalog {
+  readonly searches: string[] = [];
+  readonly wildcardEnrichments: string[] = [];
+
+  constructor(
+    private readonly hits: SeedCandidate[] = WILDCARD_HITS,
+    private readonly branch: Card[] = ON_TASTE_BRANCH,
+  ) {}
+
+  async searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]> {
+    this.searches.push(term);
+    return type === 'artist' ? this.hits : [];
+  }
+
+  async resolveDeezerArtist(name: string): Promise<{ id: number; name: string }> {
+    return { id: 1, name };
+  }
+
+  async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return deezerArtistId === 4101 ? this.branch.slice(0, limit) : [];
+  }
+
+  async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    const key = name.trim().toLowerCase();
+    const hit = this.hits.find((candidate) => candidate.name.toLowerCase() === key);
+    if (hit) {
+      this.wildcardEnrichments.push(hit.name);
+      return { itunesArtistId: hit.itunesId ?? 0, chips: hit.chips };
+    }
+    const card = this.branch.find((candidate) => candidate.creatorKey === key);
+    return card ? { itunesArtistId: 9000, chips: card.chips } : null;
+  }
+
+  async artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+    return this.releases(itunesArtistId, limit, 'album');
+  }
+
+  async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
+    return this.releases(itunesArtistId, limit, 'song');
+  }
+
+  async samplePreview(): Promise<undefined> {
+    return undefined;
+  }
+
+  private releases(itunesArtistId: number, limit: number, kind: Card['kind']): Card[] {
+    const hit = this.hits.find((candidate) => candidate.itunesId === itunesArtistId);
+    if (!hit) return [];
+    return [1, 2].slice(0, limit).map((n) => ({
+      key: `it:${kind}:${itunesArtistId}${n}`,
+      kind,
+      source: 'itunes' as const,
+      title: `${hit.name} ${kind} ${n}`,
+      creator: hit.name,
+      creatorKey: hit.name.toLowerCase(),
+      chips: hit.chips,
+      image: `https://cdn.example.test/${kind}/${itunesArtistId}${n}.jpg`,
+    }));
   }
 }
 
@@ -783,5 +879,85 @@ describe('generateCandidates', () => {
 
     expect(catalog.enriched).not.toContain('a one');
     expect(cards.some((card) => card.creatorKey === 'a one')).toBe(false);
+  });
+
+  describe('wildcards', () => {
+    it('flags outside-chip candidates and searches a curated chip the listener has not picked', async () => {
+      const catalog = new WildcardCatalog();
+      const seedChips = new Set(ARTIST_SEEDS.flatMap((seed) => seed.chips));
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      const wildcards = cards.filter((card) => card.wildcard);
+      expect(wildcards.length).toBeGreaterThan(0);
+      expect(wildcards.every((card) => card.image !== undefined && card.chips.length > 0)).toBe(true);
+      expect(wildcards.every((card) => card.chips.every((chip) => !TOP_CHIPS.includes(chip)))).toBe(true);
+      // The regular deck is still there.
+      expect(cards.some((card) => !card.wildcard)).toBe(true);
+
+      const searched = catalog.searches.map((term) => CHIPS.find((chip) => chip.label === term));
+      expect(searched.length).toBeGreaterThan(0);
+      expect(
+        searched.every((chip) => chip !== undefined && !seedChips.has(chip.id) && !TOP_CHIPS.includes(chip.id)),
+      ).toBe(true);
+    });
+
+    it('requests no wildcard candidates when the setting is off', async () => {
+      const catalog = new WildcardCatalog();
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: false,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(cards.some((card) => card.wildcard)).toBe(false);
+      expect(catalog.searches).toEqual([]);
+      expect(catalog.wildcardEnrichments).toEqual([]);
+    });
+
+    it('spends at most WILDCARD_ENRICH_LIMIT iTunes enrichments per refill', async () => {
+      const catalog = new WildcardCatalog();
+
+      await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(catalog.wildcardEnrichments.length).toBeLessThanOrEqual(WILDCARD_ENRICH_LIMIT);
+    });
+
+    it('never deals a wildcard the listener has already seen', async () => {
+      const catalog = new WildcardCatalog();
+      const seen = new Set([`it:artist:${WILDCARD_HITS[0].itunesId}`]);
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', seen, {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(cards.some((card) => card.key === `it:artist:${WILDCARD_HITS[0].itunesId}`)).toBe(false);
+      expect(cards.every((card) => !seen.has(card.key))).toBe(true);
+    });
+
+    it.each(['album', 'song'] as const)(
+      'deals wildcard %s cards with artwork and chips from the same enrichment',
+      async (cardType) => {
+        const catalog = new WildcardCatalog();
+
+        const cards = await generateCandidates(catalog, ARTIST_SEEDS, cardType, new Set(), {
+          wildcards: true,
+          topChips: TOP_CHIPS,
+        });
+
+        const wildcards = cards.filter((card) => card.wildcard);
+        expect(wildcards.length).toBeGreaterThan(0);
+        expect(wildcards.every((card) => card.kind === cardType)).toBe(true);
+        expect(wildcards.every((card) => card.image !== undefined && card.chips.length > 0)).toBe(true);
+        expect(wildcards.every((card) => card.chips.every((chip) => !TOP_CHIPS.includes(chip)))).toBe(true);
+      },
+    );
   });
 });

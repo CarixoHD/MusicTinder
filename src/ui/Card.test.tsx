@@ -58,6 +58,12 @@ describe('Card genre placement', () => {
     expect(texts('.tag')).toEqual(['Indie']);
   });
 
+  it('labels a wildcard "Something different" in place of the because line', () => {
+    mount(card({ kind: 'artist', chips: ['jazz'], because: 'Ada Vale', wildcard: true }));
+
+    expect(texts('.card__because')).toEqual(['Something different']);
+  });
+
   it('shows an album release type as a tag without repeating it in the title', () => {
     mount(
       card({

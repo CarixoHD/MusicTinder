@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Card, Seed } from '../types';
-import { applyFeedback, applyInverse, initTaste, rank, score } from './taste';
+import { applyFeedback, applyInverse, initTaste, rank, score, topTasteChips } from './taste';
 
 function card(overrides: Partial<Card> & Pick<Card, 'key'>): Card {
   return {
@@ -87,6 +87,44 @@ describe('applyFeedback', () => {
 
     expect(Math.abs(fast.delta.chips.rock ?? 0)).toBeLessThan(Math.abs(slow.delta.chips.rock ?? 0));
     expect(fast.delta.chips.rock).not.toBe(0);
+  });
+
+  it('lowers a wildcard’s chips by half of a normal skip at the same elapsed time', () => {
+    const taste = initTaste([GENRE_SEED]);
+    const wildcard = card({
+      key: 'wildcard',
+      title: 'Something Else',
+      creator: 'Surprise Act',
+      creatorKey: 'surprise act',
+      chips: ['jazz'],
+      wildcard: true,
+    });
+    const normal = applyFeedback(taste, { card: { ...wildcard, wildcard: undefined }, reaction: 'skip', elapsedMs: 9000 });
+    const explored = applyFeedback(taste, { card: wildcard, reaction: 'skip', elapsedMs: 9000 });
+
+    expect(explored.delta.chips.jazz).toBe((normal.delta.chips.jazz ?? 0) / 2);
+    expect(explored.delta.chips.jazz).not.toBe(0);
+  });
+
+  it('likes a wildcard exactly like any other card', () => {
+    const taste = initTaste([GENRE_SEED]);
+    const wildcard = card({ key: 'w', creator: 'Surprise Act', creatorKey: 'surprise act', chips: ['rock'], wildcard: true });
+    const normal = applyFeedback(taste, { card: { ...wildcard, wildcard: undefined }, reaction: 'like', elapsedMs: 9000 });
+    const liked = applyFeedback(taste, { card: wildcard, reaction: 'like', elapsedMs: 9000 });
+
+    expect(liked).toEqual(normal);
+  });
+});
+
+describe('topTasteChips', () => {
+  it('returns the listener’s strongest three chips, strongest first', () => {
+    const taste = { chips: { rock: 1, jazz: 0.5, pop: 0.25, blues: 0.125 }, creators: {}, origins: {} };
+
+    expect(topTasteChips(taste)).toEqual(['rock', 'jazz', 'pop']);
+  });
+
+  it('leaves disliked chips out: a wildcard only has to stay outside what the listener likes', () => {
+    expect(topTasteChips({ chips: { rock: 1, metal: -2 }, creators: {}, origins: {} })).toEqual(['rock']);
   });
 });
 

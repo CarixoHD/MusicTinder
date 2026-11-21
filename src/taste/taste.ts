@@ -25,6 +25,15 @@ const NO_ORIGIN = '';
 
 const creatorKeyOf = (seed: Seed): string => seed.creatorKey ?? seed.name.trim().toLowerCase();
 
+/** The listener's strongest liked chips: what a wildcard deliberately stays outside. */
+export function topTasteChips(taste: TasteWeights, limit = 3): Chip[] {
+  return Object.entries(taste.chips)
+    .filter((entry): entry is [Chip, number] => (entry[1] ?? 0) > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([chip]) => chip);
+}
+
 export function initTaste(seeds: Seed[]): TasteWeights {
   const taste: TasteWeights = { chips: {}, creators: {}, origins: {} };
 
@@ -55,7 +64,11 @@ export function applyFeedback(
 ): { taste: TasteWeights; delta: TasteDelta } {
   const { card, reaction: kind, elapsedMs } = reaction;
   const isLike = kind === 'like';
-  const amount = isLike ? BETA : -GAMMA * (elapsedMs < FAST_SKIP_MS ? FAST_SKIP_FACTOR : 1);
+  // A wildcard skip is an exploration miss, not a verdict: it moves taste half
+  // as far, so one try of an unfamiliar genre does not bury it.
+  const amount = isLike
+    ? BETA
+    : -GAMMA * (elapsedMs < FAST_SKIP_MS ? FAST_SKIP_FACTOR : 1) * (card.wildcard ? 0.5 : 1);
 
   const next: TasteWeights = {
     chips: { ...taste.chips },

@@ -77,6 +77,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const seen = useStore((state) => state.seen);
   const cardType = useStore((state) => state.settings.cardType);
   const sound = useStore((state) => state.settings.sound);
+  const wildcards = useStore((state) => state.settings.wildcards);
   const setTaste = useStore((state) => state.setTaste);
   const markSeen = useStore((state) => state.markSeen);
   const addLiked = useStore((state) => state.addLiked);
@@ -96,6 +97,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       taste: tasteIsEmpty(taste) && seeds.length > 0 ? initTaste(seeds) : taste,
       seen,
       sink: { setTaste, markSeen, addLiked },
+      wildcards: useStore.getState().settings.wildcards,
     });
     session = { key, catalog: injected ?? null, deck };
     return deck;
@@ -139,6 +141,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   useEffect(() => {
     cardStartedAt.current = performance.now();
   }, []);
+
+  // The Settings switch acts on the session deck at once: off drops queued
+  // wildcards at the next swipe, on brings them back at the next refill.
+  useEffect(() => {
+    deck.setWildcards(wildcards);
+  }, [deck, wildcards]);
 
   const refill = useCallback(() => {
     // A refill in flight is not the deck's end: an in-hand deck that runs out
