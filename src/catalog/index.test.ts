@@ -15,12 +15,17 @@ describe('createCatalog', () => {
     ]);
   });
 
-  it('stub adapters reject with a typed unknown CatalogError', async () => {
+  it('wires the real adapters (no stubs remain)', async () => {
     const catalog = createCatalog();
+    const { searchSeeds } = await import('./itunes');
+    const { enrichArtist, artistTopTracks, artistAlbums } = await import('./itunesLookup');
+    const { relatedArtists, resolveDeezerArtist } = await import('./deezer');
 
-    await expect(catalog.searchSeeds('anything', 'artist')).rejects.toMatchObject({
-      name: 'CatalogError',
-      kind: 'unknown',
-    });
+    expect(catalog.searchSeeds).toBe(searchSeeds);
+    expect(catalog.enrichArtist).toBe(enrichArtist);
+    expect(catalog.artistTopTracks).toBe(artistTopTracks);
+    expect(catalog.artistAlbums).toBe(artistAlbums);
+    expect(catalog.relatedArtists).toBe(relatedArtists);
+    expect(catalog.resolveDeezerArtist).toBe(resolveDeezerArtist);
   });
 });
