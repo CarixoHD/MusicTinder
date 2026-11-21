@@ -93,6 +93,7 @@ export default function Liked() {
   const liked = useStore((state) => state.liked);
   const musicApp = useStore((state) => state.settings.musicApp);
   const setScreen = useStore((state) => state.setScreen);
+  const hasSeeds = useStore((state) => state.seeds.length > 0);
 
   if (liked.length === 0) {
     return (
@@ -101,7 +102,11 @@ export default function Liked() {
         title="Nothing saved yet"
         body="Swipe a few cards and your finds collect here."
       >
-        <Button variant="secondary" onClick={() => withTransition(() => setScreen('discovery'))}>
+        {/* Without seeds Discover opens Setup, the same landing a reset gives. */}
+        <Button
+          variant="secondary"
+          onClick={() => withTransition(() => setScreen(hasSeeds ? 'discovery' : 'setup'))}
+        >
           Go to Discover
         </Button>
       </EmptyState>

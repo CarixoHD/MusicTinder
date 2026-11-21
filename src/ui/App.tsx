@@ -29,6 +29,7 @@ const loadDomMax = () => import('./motion-features').then((module) => module.fea
 export function App() {
   const screen = useStore((state) => state.screen);
   const setScreen = useStore((state) => state.setScreen);
+  const hasSeeds = useStore((state) => state.seeds.length > 0);
   const isSettingsOpen = useStore((state) => state.settingsOpen);
   const setSettingsOpen = useStore((state) => state.setSettingsOpen);
   const storageNotice = useStore((state) => state.storageNotice);
@@ -47,6 +48,9 @@ export function App() {
   }, [sound]);
 
   const ScreenView = SCREENS[screen];
+  // Setup lives inside the Discover flow: the tab stays lit while the user
+  // picks seeds, and with no seeds Discover has nothing to deal, so it opens Setup.
+  const discoverActive = screen === 'discovery' || screen === 'setup';
 
   return (
     <MotionConfig reducedMotion="user">
@@ -55,7 +59,7 @@ export function App() {
           <header className="app__header">
             <p className="app__brand">Music Tinder</p>
             <div className="app__actions">
-              {screen === 'discovery' && (
+              {screen === 'discovery' && hasSeeds && (
                 <button
                   type="button"
                   className="icon-button"
@@ -101,8 +105,8 @@ export function App() {
             <button
               type="button"
               className="tabbar__button"
-              aria-current={screen === 'discovery' ? 'page' : undefined}
-              onClick={() => withTransition(() => setScreen('discovery'))}
+              aria-current={discoverActive ? 'page' : undefined}
+              onClick={() => withTransition(() => setScreen(hasSeeds ? 'discovery' : 'setup'))}
             >
               <DiscoverIcon />
               Discover
