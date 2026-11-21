@@ -68,8 +68,10 @@ class FixedCatalog implements Catalog {
     return this.cards.slice(0, limit);
   }
 
-  async enrichArtist() {
-    return null;
+  /** Mirrors the live catalog: the genre of a related artist comes from iTunes. */
+  async enrichArtist(name: string) {
+    const index = this.cards.findIndex((card) => card.creatorKey === name.trim().toLowerCase());
+    return index === -1 ? null : { itunesArtistId: 1000 + index, chips: this.cards[index].chips };
   }
 
   async artistTopTracks(): Promise<Card[]> {

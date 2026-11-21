@@ -103,6 +103,13 @@ class OverlapCatalog extends FakeCatalog {
     const cards = await super.relatedArtists(deezerArtistId, limit);
     return deezerArtistId === 4101 || deezerArtistId === 4102 ? [...cards, SHARED] : cards;
   }
+
+  override async enrichArtist(name: string) {
+    if (name.trim().toLowerCase() === SHARED.creatorKey) {
+      return { itunesArtistId: 5999, chips: SHARED.chips };
+    }
+    return super.enrichArtist(name);
+  }
 }
 
 class GenreCatalog extends FakeCatalog {
@@ -180,6 +187,21 @@ const failingCatalog = (): Catalog => {
   };
 };
 
+/** Related artists ship without genres (as Deezer does); only iTunes has them. */
+class UnenrichedCatalog extends FakeCatalog {
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    const cards = await super.relatedArtists(deezerArtistId, limit);
+    return cards.map((card) => ({ ...card, chips: [] }));
+  }
+}
+
+/** One related artist that iTunes cannot identify. */
+class UnknownArtistCatalog extends UnenrichedCatalog {
+  override async enrichArtist(name: string) {
+    return name.trim().toLowerCase() === 'glass harbour' ? null : super.enrichArtist(name);
+  }
+}
+
 describe('generateCandidates', () => {
   it('returns only artist cards, none seen and none a seed artist', async () => {
     const cards = await generateCandidates(new FakeCatalog(), ARTIST_SEEDS, 'artist', new Set());
@@ -188,6 +210,20 @@ describe('generateCandidates', () => {
     expect(cards.every((card) => card.kind === 'artist')).toBe(true);
     expect(cards.every((card) => !SEED_ARTIST_KEYS.has(card.creatorKey))).toBe(true);
     expect(cards.every((card) => card.related && card.related.length > 0)).toBe(true);
+  });
+
+  it('gives every artist card its genre from enrichment, not only the first few', async () => {
+    const cards = await generateCandidates(new UnenrichedCatalog(), ARTIST_SEEDS, 'artist', new Set());
+
+    expect(cards.length).toBeGreaterThan(5);
+    expect(cards.every((card) => card.chips.length > 0)).toBe(true);
+  });
+
+  it('never deals an artist it could not tag', async () => {
+    const cards = await generateCandidates(new UnknownArtistCatalog(), ARTIST_SEEDS, 'artist', new Set());
+
+    expect(cards.some((card) => card.creatorKey === 'glass harbour')).toBe(false);
+    expect(cards.every((card) => card.chips.length > 0)).toBe(true);
   });
 
   it('never returns a seen key', async () => {
@@ -285,7 +321,7 @@ describe('generateCandidates', () => {
     ).rejects.toBeInstanceOf(CatalogError);
   });
 
-  it.each(['album', 'song'] as const)(
+  it.each(['artist', 'album', 'song'] as const)(
     'rejects as a rate error when %s enrichment cools down, not as a dry deck',
     async (cardType) => {
       await expect(

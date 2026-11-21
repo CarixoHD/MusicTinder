@@ -169,7 +169,10 @@ const RELATED_RELEASES: Readonly<Record<string, { itunesId: number; genre: strin
   'Slow Machines': { itunesId: 7102, genre: 'Electronic' },
   'Neon Field': { itunesId: 7103, genre: 'Dance' },
   'Paper Satellites': { itunesId: 7104, genre: 'Ambient' },
+  'Wire Assembly': { itunesId: 7105, genre: 'Electronic' },
+  'Tidal Rooms': { itunesId: 7106, genre: 'Ambient' },
   'Low Atlas': { itunesId: 7107, genre: 'Indie' },
+  'Mira Chase': { itunesId: 7108, genre: 'Pop' },
 };
 
 const relatedArtistResult = (name: string, release: { itunesId: number; genre: string }) => ({
