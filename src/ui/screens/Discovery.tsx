@@ -116,6 +116,9 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   // Failed lookups waiting for their next attempt, and how many have failed.
   const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const retryAttempts = useRef(new Map<string, number>());
+  // Cards that ran out of attempts and settled on "No sample": still retryable
+  // when the network returns.
+  const exhaustedSamples = useRef(new Set<string>());
   const mounted = useRef(true);
   const cardStartedAt = useRef(0);
   const player = previewPlayer();
@@ -250,6 +253,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
           const attempt = (retryAttempts.current.get(card.key) ?? 0) + 1;
           retryAttempts.current.set(card.key, attempt);
           if (attempt > SAMPLE_RETRY_LIMIT) {
+            exhaustedSamples.current.add(card.key);
             if (mounted.current) setAnswered((current) => new Set(current).add(card.key));
             return;
           }
@@ -273,6 +277,15 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     const retry = () => {
       for (const timer of retryTimers.current.values()) clearTimeout(timer);
       retryTimers.current.clear();
+      retryAttempts.current.clear();
+      const givenUp = exhaustedSamples.current;
+      exhaustedSamples.current = new Set();
+      setAnswered((current) => {
+        if (![...givenUp].some((key) => current.has(key))) return current;
+        const next = new Set(current);
+        for (const key of givenUp) next.delete(key);
+        return next;
+      });
       setRetryTick((tick) => tick + 1);
     };
     window.addEventListener('online', retry);

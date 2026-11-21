@@ -16,7 +16,17 @@ const SOUND_ON = { musicApp: 'spotify', sound: true, theme: 'system' } as const;
 let container: HTMLDivElement;
 let root: Root;
 
+const advance = async (ms: number): Promise<void> => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
 const flush = async (): Promise<void> => {
+  if (vi.isFakeTimers()) {
+    await advance(0);
+    return;
+  }
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -202,6 +212,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   act(() => root.unmount());
+  vi.useRealTimers();
   previewPlayer().stop();
   // Keep the player's two buffers in the body: the singleton outlives a test,
   // and a later test raises its media 'error' event to fake an expired URL.
@@ -371,6 +382,28 @@ describe('Discovery sample previews', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('asks a given-up lookup again when the network returns', async () => {
+    vi.useFakeTimers();
+    const catalog = new FlakyCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0];
+
+    for (const delay of [1_000, 2_000, 4_000, 8_000]) await advance(delay);
+    expect(current().textContent).toContain('No sample');
+    expect(catalog.callsFor(key)).toBe(5);
+
+    catalog.fail = false;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await flush();
+    await flush();
+
+    expect(catalog.callsFor(key)).toBe(6);
+    expect(current().textContent).not.toContain('No sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
   });
 
   it('starts the promoted card when its sample lands after the swipe', async () => {
