@@ -158,6 +158,22 @@ describe('deck refill', () => {
 
     expect(state.pool).toEqual([]);
     expect(state.status).toBe('empty');
+    expect(state.emptyReason).toBe('filtered');
+  });
+
+  it('reports no candidates when the catalog answers with nothing for these seeds', async () => {
+    const deck = createDeck({
+      catalog: new FixedCatalog([]),
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+
+    const state = await deck.refill();
+
+    expect(state.pool).toEqual([]);
+    expect(state.status).toBe('empty');
+    expect(state.emptyReason).toBe('no-candidates');
   });
 
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {
@@ -286,5 +302,28 @@ describe('deck commit', () => {
 
     expect(next.swipes).toBe(before.swipes + 1);
     expect(deck.shouldRefill()).toBe(next.pool.length < 15);
+  });
+
+  it('stays stalled through swipes until a retry succeeds', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    catalog.failing = false;
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    await deck.refill();
+
+    catalog.failing = true;
+    const stalled = await deck.refill();
+    expect(stalled.status).toBe('stalled');
+
+    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    expect(swiped.status).toBe('stalled');
+
+    catalog.failing = false;
+    const retried = await deck.refill();
+    expect(retried.status).toBe('dealing');
   });
 });

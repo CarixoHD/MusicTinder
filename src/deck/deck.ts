@@ -37,10 +37,16 @@ export interface DeckInit {
   sink?: DeckSink;
 }
 
+/** Why a refill left nothing to deal: the catalog returned nothing at all, or
+ *  everything it returned was already seen / below the quality floor. */
+export type EmptyReason = 'no-candidates' | 'filtered' | null;
+
 export interface DeckState {
   /** Unseen candidates that clear the quality floor, best first. */
   pool: Card[];
   status: DeckStatus;
+  /** null whenever the pool has cards; drives the Discovery zero-candidates copy. */
+  emptyReason: EmptyReason;
   taste: TasteWeights;
   /** Swipes since the last successful refill; drives the refill cadence. */
   swipes: number;
@@ -70,7 +76,13 @@ const likedFrom = (card: Card): LikedItem => ({
 
 export function createDeck(init: DeckInit): Deck {
   const seen = new Set(init.seen ?? []);
-  let state: DeckState = { pool: [], status: 'dealing', taste: init.taste, swipes: 0 };
+  let state: DeckState = {
+    pool: [],
+    status: 'dealing',
+    emptyReason: null,
+    taste: init.taste,
+    swipes: 0,
+  };
   let pending: Promise<DeckState> | null = null;
 
   // Unseen, above the quality floor (story 10), best first, each carrying the
@@ -92,7 +104,14 @@ export function createDeck(init: DeckInit): Deck {
       try {
         const generated = await generateCandidates(init.catalog, init.seeds, init.cardType, seen);
         const pool = ranked(state.taste, [...state.pool, ...generated]);
-        state = { ...state, pool, status: pool.length > 0 ? 'dealing' : 'empty', swipes: 0 };
+        state = {
+          ...state,
+          pool,
+          status: pool.length > 0 ? 'dealing' : 'empty',
+          emptyReason:
+            pool.length > 0 ? null : generated.length === 0 ? 'no-candidates' : 'filtered',
+          swipes: 0,
+        };
       } catch {
         // A rejected refill keeps the cards already in hand and surfaces
         // `stalled` so the caller can offer a retry.
@@ -116,7 +135,14 @@ export function createDeck(init: DeckInit): Deck {
     if (reaction.reaction === 'like') init.sink?.addLiked(likedFrom(current));
 
     const pool = ranked(taste, state.pool.slice(1));
-    state = { pool, status: pool.length > 0 ? 'dealing' : 'empty', taste, swipes: state.swipes + 1 };
+    state = {
+      ...state,
+      pool,
+      // A failed refill stays flagged through swipes; only a refill clears it.
+      status: pool.length > 0 ? (state.status === 'stalled' ? 'stalled' : 'dealing') : 'empty',
+      taste,
+      swipes: state.swipes + 1,
+    };
     return state;
   };
 
