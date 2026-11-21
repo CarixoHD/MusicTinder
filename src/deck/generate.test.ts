@@ -8,7 +8,7 @@ import {
   type LookupOptions,
   type Seed,
 } from '../types';
-import { generateCandidates, LIKED_ANCHOR_LIMIT } from './generate';
+import { generateCandidates, LIKED_ANCHOR_LIMIT, WAIT_ARTIST_LIMIT } from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
   {
@@ -285,6 +285,81 @@ class UnenrichedCatalog extends FakeCatalog {
 class UnknownArtistCatalog extends UnenrichedCatalog {
   override async enrichArtist(name: string) {
     return name.trim().toLowerCase() === 'glass harbour' ? null : super.enrichArtist(name);
+  }
+}
+
+/**
+ * The iTunes budget is cooling down: only a lookup allowed to wait gets a
+ * token. Glass Harbour is the first related artist and iTunes has no match for
+ * it, so the first wait yields nothing at all.
+ */
+class CoolingFirstUnknownCatalog extends DeeperCatalog {
+  readonly enrichWaits: boolean[] = [];
+  readonly releaseWaits: boolean[] = [];
+
+  override async enrichArtist(name: string, options?: LookupOptions) {
+    const wait = options?.waitForBudget === true;
+    this.enrichWaits.push(wait);
+    if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    return name.trim().toLowerCase() === 'glass harbour' ? null : super.enrichArtist(name);
+  }
+
+  override async artistTopTracks(itunesArtistId: number, limit: number, options?: LookupOptions) {
+    const wait = options?.waitForBudget === true;
+    this.releaseWaits.push(wait);
+    if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    return super.artistTopTracks(itunesArtistId, limit);
+  }
+
+  override async artistAlbums(itunesArtistId: number, limit: number, options?: LookupOptions) {
+    const wait = options?.waitForBudget === true;
+    this.releaseWaits.push(wait);
+    if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    return super.artistAlbums(itunesArtistId, limit);
+  }
+}
+
+const PREFIX_ROSTER: Card[] = ['Miss One', 'Blank Two', 'Tag Three', 'Late Four'].map((name, index) => ({
+  key: `dz:artist:${6100 + index}`,
+  kind: 'artist',
+  source: 'deezer',
+  title: name,
+  creator: name,
+  creatorKey: name.toLowerCase(),
+  chips: [],
+}));
+
+/** The first artists are untaggable: one has no iTunes match, one no genre. */
+class CoolingUntaggedPrefixCatalog extends FakeCatalog {
+  readonly enrichWaits: boolean[] = [];
+
+  override async relatedArtists(deezerArtistId: number): Promise<Card[]> {
+    return deezerArtistId === 4101 ? PREFIX_ROSTER : [];
+  }
+
+  override async enrichArtist(
+    name: string,
+    options?: LookupOptions,
+  ): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    const wait = options?.waitForBudget === true;
+    this.enrichWaits.push(wait);
+    if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    const key = name.trim().toLowerCase();
+    if (key === 'miss one') return null;
+    if (key === 'blank two') return { itunesArtistId: 6101, chips: [] };
+    return { itunesArtistId: 6102, chips: ['rock'] };
+  }
+}
+
+/** Every related artist is unknown to iTunes while the budget cools down. */
+class CoolingUntaggableCatalog extends DeeperCatalog {
+  readonly enrichWaits: boolean[] = [];
+
+  override async enrichArtist(_name: string, options?: LookupOptions) {
+    const wait = options?.waitForBudget === true;
+    this.enrichWaits.push(wait);
+    if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    return null;
   }
 }
 
@@ -602,6 +677,52 @@ describe('generateCandidates', () => {
     await generateCandidates(catalog, ARTIST_SEEDS, 'song', new Set());
 
     expect([...catalog.enrichWaits, ...catalog.releaseWaits].every((wait) => !wait)).toBe(true);
+  });
+
+  it.each(['album', 'song'] as const)(
+    'keeps waiting for the budget on later artists while no %s card exists yet',
+    async (cardType) => {
+      const catalog = new CoolingFirstUnknownCatalog();
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, cardType, new Set(), {
+        waitForFirstCard: true,
+      });
+
+      expect(cards.length).toBeGreaterThan(0);
+      // Glass Harbour has no iTunes match: the wait moves on to the next artist
+      // instead of the card being given up on.
+      expect(catalog.enrichWaits[0]).toBe(true);
+      expect(catalog.enrichWaits[1]).toBe(true);
+      expect(catalog.releaseWaits[0]).toBe(true);
+      // A card exists now, so the artists after it stop holding the deck for a token.
+      expect(catalog.enrichWaits.slice(2).every((wait) => !wait)).toBe(true);
+      expect(catalog.releaseWaits.slice(1).every((wait) => !wait)).toBe(true);
+    },
+  );
+
+  it('keeps waiting for the budget until an artist actually gets tags', async () => {
+    const catalog = new CoolingUntaggedPrefixCatalog();
+
+    const cards = await generateCandidates(catalog, [ARTIST_SEEDS[0]], 'artist', new Set(), {
+      waitForFirstCard: true,
+    });
+
+    expect(cards.map((card) => card.creatorKey)).toEqual(['tag three']);
+    // null and chips-less answers are not a tagged artist: keep waiting.
+    expect(catalog.enrichWaits.slice(0, 3)).toEqual([true, true, true]);
+    expect(catalog.enrichWaits[3]).toBe(false);
+  });
+
+  it('bounds the wait so a seed whose related artists all miss ends without failing', async () => {
+    const catalog = new CoolingUntaggableCatalog();
+
+    const cards = await generateCandidates(catalog, [ARTIST_SEEDS[0]], 'artist', new Set(), {
+      waitForFirstCard: true,
+    });
+
+    expect(cards).toEqual([]);
+    expect(catalog.enrichWaits.filter(Boolean)).toHaveLength(WAIT_ARTIST_LIMIT);
+    expect(catalog.enrichWaits.length).toBeGreaterThan(WAIT_ARTIST_LIMIT);
   });
 
   it('reports the outage, not a later cool-down, when both leave nothing to deal', async () => {
