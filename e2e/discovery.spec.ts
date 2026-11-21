@@ -26,11 +26,16 @@ interface StoredState {
   taste: { chips: Record<string, number>; creators: Record<string, number> };
 }
 
-async function seedDeck(page: Page, seen: string[] = []): Promise<void> {
+interface SeedOptions {
+  cardType?: 'artist' | 'album' | 'song';
+  seen?: string[];
+}
+
+async function seedDeck(page: Page, { cardType = 'artist', seen = [] }: SeedOptions = {}): Promise<void> {
   const persisted = {
     state: {
       seeds: [SEED],
-      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType },
       taste: { chips: {}, creators: {}, origins: {} },
       liked: [],
       seen,
@@ -46,6 +51,74 @@ async function seedDeck(page: Page, seen: string[] = []): Promise<void> {
   }, JSON.stringify(persisted));
 }
 
+// The shared fixture only serves the seed anchors to iTunes; album/song cards
+// need the related artists resolved too. Registered after mockCatalog, so this
+// handler runs first and falls back for everything it does not own.
+const RELATED_ARTISTS: Record<string, { itunesId: number; genre: string }> = {
+  'Glass Harbour': { itunesId: 7101, genre: 'Electronic' },
+  'Slow Machines': { itunesId: 7102, genre: 'Electronic' },
+  'Neon Field': { itunesId: 7103, genre: 'Dance' },
+  'Paper Satellites': { itunesId: 7104, genre: 'Ambient' },
+  'Low Atlas': { itunesId: 7107, genre: 'Indie' },
+};
+
+async function mockRelatedArtistLookups(page: Page): Promise<void> {
+  await page.route('https://itunes.apple.com/**', async (route) => {
+    const url = new URL(route.request().url());
+    const term = url.searchParams.get('term') ?? '';
+    const artist = RELATED_ARTISTS[term];
+    const json = (payload: unknown) =>
+      route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+        body: JSON.stringify(payload),
+      });
+
+    if (url.pathname === '/search' && artist) {
+      await json({
+        resultCount: 1,
+        results: [
+          {
+            wrapperType: 'artist',
+            artistType: 'Artist',
+            artistId: artist.itunesId,
+            artistName: term,
+            primaryGenreName: artist.genre,
+          },
+        ],
+      });
+      return;
+    }
+
+    const album = Object.entries(RELATED_ARTISTS).find(
+      ([, item]) => item.itunesId === Number(url.searchParams.get('id')),
+    );
+    if (url.pathname === '/lookup' && url.searchParams.get('entity') === 'album' && album) {
+      const [name, item] = album;
+      await json({
+        resultCount: 1,
+        results: [
+          {
+            wrapperType: 'collection',
+            collectionType: 'Album',
+            collectionId: item.itunesId * 10 + 1,
+            collectionName: `${name} No. 1`,
+            artistId: item.itunesId,
+            artistName: name,
+            primaryGenreName: item.genre,
+            releaseDate: '2022-01-01T00:00:00Z',
+            artworkUrl100: `https://cdn.example.test/art/${item.itunesId}.jpg`,
+            collectionViewUrl: `https://music.apple.com/album/${item.itunesId * 10 + 1}`,
+          },
+        ],
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+}
+
 const stored = (page: Page): Promise<StoredState | null> =>
   page.evaluate(() => {
     const raw = localStorage.getItem('mt:v1');
@@ -58,10 +131,11 @@ test.beforeEach(async ({ page }) => {
   await mockCatalog(page);
 });
 
-test('deals a card with artwork, title, creator and a because line, and prefetches the next cards', async ({
+test('deals a card with artwork, title, creator, year, chips and a because line, and prefetches the next cards', async ({
   page,
 }) => {
-  await seedDeck(page);
+  await mockRelatedArtistLookups(page);
+  await seedDeck(page, { cardType: 'album' });
   await page.goto('/');
 
   const current = page.locator('.deck__current');
@@ -70,6 +144,8 @@ test('deals a card with artwork, title, creator and a because line, and prefetch
   await expect(artwork).toHaveAttribute('alt', / — /);
   await expect(current.getByRole('heading', { level: 2 })).toHaveText(/\S/);
   await expect(current.locator('.card__creator')).toHaveText(/\S/);
+  await expect(current.locator('.card__year')).toHaveText(/^\d{4}$/);
+  await expect(current.locator('.tag')).not.toHaveCount(0);
   await expect(current.locator('.card__because')).toContainText(/because you like/i);
 
   // At least three upcoming cards are already in the DOM behind the current one.
@@ -126,7 +202,7 @@ test('likes and skips by arrow key and by button, recording each reaction and de
 });
 
 test('ends quietly when nothing unseen is left and Change seeds returns to Setup', async ({ page }) => {
-  await seedDeck(page, RELATED_KEYS);
+  await seedDeck(page, { seen: RELATED_KEYS });
   await page.goto('/');
 
   await expect(
