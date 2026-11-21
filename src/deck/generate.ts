@@ -121,20 +121,33 @@ export async function generateCandidates(
 
   // 3. Related artists per anchor. A duplicate profile can answer with no
   //    related artists at all: try the next same-name profile before giving up
-  //    on the anchor.
+  //    on the anchor. A seed saved in an older session can carry a dead id, so
+  //    fall back to resolving its name; a dead id is never asked twice in a run.
+  const deadIds = new Set<number>();
+  const lookupRelated = async (ids: number[]): Promise<Card[] | undefined> => {
+    for (const deezerArtistId of ids) {
+      if (deadIds.has(deezerArtistId)) continue;
+      const candidates = await attempt(() => catalog.relatedArtists(deezerArtistId, RELATED_LIMIT));
+      if (candidates?.length) return candidates;
+      deadIds.add(deezerArtistId);
+    }
+    return undefined;
+  };
+
   const perAnchor: { anchorKey: string; cards: Card[] }[] = [];
   for (const anchor of resolved) {
-    for (const deezerArtistId of anchor.deezerArtistIds) {
-      const candidates = await attempt(() => catalog.relatedArtists(deezerArtistId, RELATED_LIMIT));
-      if (!candidates?.length) continue;
-      perAnchor.push({
-        anchorKey: anchor.creatorKey,
-        cards: candidates.filter(
-          (card) => card.kind === 'artist' && !seenKeys.has(card.key) && !excluded.has(card.creatorKey),
-        ),
-      });
-      break;
+    let candidates = await lookupRelated(anchor.deezerArtistIds);
+    if (!candidates && anchor.deezerArtistId !== undefined) {
+      const found = await attempt(() => catalog.resolveDeezerArtist(anchor.name));
+      if (found) candidates = await lookupRelated([found.id, ...(found.alternatives ?? []).map((a) => a.id)]);
     }
+    if (!candidates?.length) continue;
+    perAnchor.push({
+      anchorKey: anchor.creatorKey,
+      cards: candidates.filter(
+        (card) => card.kind === 'artist' && !seenKeys.has(card.key) && !excluded.has(card.creatorKey),
+      ),
+    });
   }
 
   // Merge the anchors round-robin, deduped by creatorKey with the anchors
