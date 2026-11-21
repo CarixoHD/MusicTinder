@@ -221,6 +221,49 @@ describe('artistAlbums', () => {
     ]);
     expect(cards[0].previewUrl).toBeUndefined();
   });
+
+  it('strips a trailing Single/EP marker from the title and keeps it as the release type', async () => {
+    serveLookups(() => ({
+      resultCount: 3,
+      results: [
+        {
+          wrapperType: 'collection',
+          collectionType: 'Album',
+          artistId: 42,
+          artistName: 'Ada Vale',
+          collectionId: 601,
+          collectionName: 'Bitch - Single',
+          primaryGenreName: 'Pop',
+        },
+        {
+          wrapperType: 'collection',
+          collectionType: 'Album',
+          artistId: 42,
+          artistName: 'Ada Vale',
+          collectionId: 602,
+          collectionName: 'Low Tide - EP',
+          primaryGenreName: 'Indie',
+        },
+        {
+          wrapperType: 'collection',
+          collectionType: 'Album',
+          artistId: 42,
+          artistName: 'Ada Vale',
+          collectionId: 603,
+          collectionName: 'Night Bus (Deluxe)',
+          primaryGenreName: 'Electronic',
+        },
+      ],
+    }));
+
+    const cards = await artistAlbums(42, 3);
+
+    expect(cards.map((card) => [card.title, card.releaseType])).toEqual([
+      ['Bitch', 'Single'],
+      ['Low Tide', 'EP'],
+      ['Night Bus (Deluxe)', undefined],
+    ]);
+  });
 });
 
 const cardOf = (overrides: Partial<Card> & Pick<Card, 'key' | 'kind'>): Card => ({

@@ -36,6 +36,9 @@ export type Chip =
 
 export type CardKind = 'artist' | 'album' | 'song';
 
+/** Apple marks these in the album title ("Bitch - Single"); the card shows it as a tag. */
+export type ReleaseType = 'Single' | 'EP';
+
 export type SeedKind = 'artist' | 'album' | 'genre';
 
 export interface Seed {
@@ -87,11 +90,15 @@ export interface Card {
   image?: string;
   previewUrl?: string;
   appleUrl?: string;
+  /** Album only: the release kind Apple appends to the title, shown as a tag. */
+  releaseType?: ReleaseType;
   chips: Chip[];
   /** creatorKeys of the anchor artists this candidate came from. */
   related?: string[];
   /** Deezer fan count of the artist; absent when the catalog does not report one. */
   fans?: number;
+  /** Deezer album count of a related artist; the artist card's tag when it has one genre. */
+  albumCount?: number;
   /** Display name of the seed/liked item that produced the strongest score. */
   because?: string;
   /** Song title of the just-in-time sample attached by Discovery, when known. */

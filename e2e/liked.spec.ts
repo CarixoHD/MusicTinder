@@ -130,19 +130,28 @@ for (const app of APPS) {
   });
 }
 
-test('empty Liked explains itself and its button leads to Discover', async ({ page }) => {
+test('empty Liked explains itself and its button leads to Discover, which opens Setup without seeds', async ({
+  page,
+}) => {
   await page.goto('/');
   const tabbar = page.getByRole('navigation', { name: 'Main' });
   await tabbar.getByRole('button', { name: 'Liked' }).click();
 
   await expect(page.getByRole('heading', { level: 1, name: 'Nothing saved yet' })).toBeVisible();
   await expect(page.getByText('Swipe a few cards and your finds collect here.')).toBeVisible();
+  // Balanced within the 32ch cap, so no lone last word.
+  await expect(page.locator('.empty-state__body')).toHaveCSS('text-wrap', 'balance');
 
+  // With no seeds there is no deck to go back to: Discover opens Setup, the
+  // same place a reset lands, instead of a second empty state with another hop.
   await page.getByRole('button', { name: 'Go to Discover' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
   await expect(tabbar.getByRole('button', { name: 'Discover' })).toHaveAttribute(
     'aria-current',
     'page',
   );
+  // No deck, no sound toggle in the header.
+  await expect(page.getByRole('button', { name: /^Sound (on|off)$/ })).toHaveCount(0);
 });
 
 test('?seedDemo=1 fills a fresh profile and lands on Discovery', async ({ page }) => {

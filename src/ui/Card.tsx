@@ -15,10 +15,21 @@ const LONG_TITLE = 18;
 /** Recommendation card: a surface, artwork, facts, and the sample control. */
 export function Card({ card }: { card: CardModel }) {
   // An artist's name is already the title; the second line carries what it is.
-  const secondary =
-    card.kind === 'artist'
-      ? [KIND_LABEL.artist, card.chips[0] && chipLabel(card.chips[0])].filter(Boolean).join(' · ')
-      : card.creator;
+  // The tag row adds the second genre, or the album count when the artist has
+  // just one genre, so the genre is never printed twice. A catalog that reports
+  // no album count falls back to the genre tag rather than an empty row.
+  const isArtist = card.kind === 'artist';
+  const secondary = isArtist
+    ? [KIND_LABEL.artist, card.chips[0] && chipLabel(card.chips[0])].filter(Boolean).join(' · ')
+    : card.creator;
+  const artistTags = (): string[] => {
+    if (card.chips.length > 1) return card.chips.slice(1, 3).map(chipLabel);
+    if (card.albumCount !== undefined) {
+      return [`${card.albumCount} album${card.albumCount === 1 ? '' : 's'}`];
+    }
+    return card.chips.slice(0, 1).map(chipLabel);
+  };
+  const tags = isArtist ? artistTags() : card.chips.slice(0, 2).map(chipLabel);
 
   // Spoken once: an artist's creator is the artist again.
   const spoken = card.kind === 'artist' ? card.title : `${card.title} — ${card.creator}`;
@@ -51,9 +62,10 @@ export function Card({ card }: { card: CardModel }) {
 
       <div className="card__meta">
         {card.year !== undefined && <span className="card__year">{card.year}</span>}
-        {card.chips.slice(0, 2).map((chip) => (
-          <span key={chip} className="tag">
-            {chipLabel(chip)}
+        {card.releaseType && <span className="tag">{card.releaseType}</span>}
+        {tags.map((label) => (
+          <span key={label} className="tag">
+            {label}
           </span>
         ))}
       </div>

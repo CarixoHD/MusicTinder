@@ -11,6 +11,7 @@ interface DeezerArtist {
   name: string;
   picture_big?: string;
   nb_fan?: number;
+  nb_album?: number;
 }
 
 interface DeezerList<T> {
@@ -67,6 +68,7 @@ export async function relatedArtists(deezerArtistId: number, limit: number): Pro
     creatorKey: creatorKey(artist.name),
     image: artist.picture_big,
     fans: artist.nb_fan,
+    albumCount: artist.nb_album,
     // Deezer preview URLs are signed and expire in ~15 min: never store one on a card.
     chips: [],
   }));
