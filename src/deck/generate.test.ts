@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FakeCatalog } from '../testkit/fakeCatalog';
 import { CatalogError, type Card, type Catalog, type Chip, type Seed } from '../types';
-import { generateCandidates } from './generate';
+import { generateCandidates, LIKED_ANCHOR_LIMIT } from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
   {
@@ -221,6 +221,98 @@ class UnknownArtistCatalog extends UnenrichedCatalog {
   }
 }
 
+const FAR_SHORE: Card = {
+  key: 'dz:artist:6002',
+  kind: 'artist',
+  source: 'deezer',
+  title: 'Far Shore',
+  creator: 'Far Shore',
+  creatorKey: 'far shore',
+  image: 'https://cdn.example.test/artists/6002.jpg',
+  chips: ['dance'],
+};
+
+/**
+ * Glass Harbour is only reachable through Ada Vale, and its own profile opens
+ * Far Shore: a second hop a seed-only refill can never reach.
+ */
+class SecondHopCatalog extends FakeCatalog {
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    return name.trim().toLowerCase() === 'glass harbour' ? { id: 5101, name } : super.resolveDeezerArtist(name);
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    if (deezerArtistId === 5101) return [FAR_SHORE];
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+
+  override async enrichArtist(name: string) {
+    return name.trim().toLowerCase() === FAR_SHORE.creatorKey
+      ? { itunesArtistId: 6002, chips: FAR_SHORE.chips }
+      : super.enrichArtist(name);
+  }
+}
+
+/** Resolves any artist name to a fresh profile, and records the expansion. */
+class LikedAnchorCatalog extends FakeCatalog {
+  readonly resolved: string[] = [];
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    const found = await super.resolveDeezerArtist(name);
+    if (found) return found;
+    this.resolved.push(name.trim().toLowerCase());
+    return { id: 9000 + this.resolved.length, name };
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    return deezerArtistId > 9000 ? [] : super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+const rosterCard = (name: string, deezerId: number): Card => ({
+  key: `dz:artist:${deezerId}`,
+  kind: 'artist',
+  source: 'deezer',
+  title: name,
+  creator: name,
+  creatorKey: name.toLowerCase(),
+  image: `https://cdn.example.test/artists/${deezerId}.jpg`,
+  chips: ['rock'],
+});
+
+/** Two anchors with several related artists each; records the enrichment order. */
+class RotationCatalog extends FakeCatalog {
+  readonly enriched: string[] = [];
+
+  constructor(
+    private readonly graph: Record<number, Card[]>,
+    private readonly budget = Number.POSITIVE_INFINITY,
+  ) {
+    super();
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return (this.graph[deezerArtistId] ?? []).slice(0, limit);
+  }
+
+  override async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    this.enriched.push(name.trim().toLowerCase());
+    // The shared iTunes budget: past it, lookups resolve empty like a cool-down.
+    if (this.enriched.length > this.budget) return null;
+    return { itunesArtistId: 10_000 + this.enriched.length, chips: ['rock'] };
+  }
+}
+
+const ROTATION: Record<number, Card[]> = {
+  4101: [rosterCard('A One', 7101), rosterCard('A Two', 7102), rosterCard('A Three', 7103)],
+  4102: [rosterCard('B One', 7201), rosterCard('B Two', 7202), rosterCard('B Three', 7203)],
+};
+
 describe('generateCandidates', () => {
   it('returns only artist cards, none seen and none a seed artist', async () => {
     const cards = await generateCandidates(new FakeCatalog(), ARTIST_SEEDS, 'artist', new Set());
@@ -377,5 +469,53 @@ describe('generateCandidates', () => {
     const cards = await generateCandidates(new NotFoundCatalog(), ARTIST_SEEDS, 'artist', new Set());
 
     expect(cards).toEqual([]);
+  });
+
+  it('expands a liked artist as a second-hop anchor, never dealing it or a seed', async () => {
+    const catalog = new SecondHopCatalog();
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+      likedAnchors: [{ name: 'Glass Harbour', creatorKey: 'glass harbour' }],
+    });
+
+    expect(catalog.relatedCalls).toContain(5101);
+    const secondHop = cards.filter((card) => card.creatorKey === 'far shore');
+    expect(secondHop).toHaveLength(1);
+    expect(secondHop[0].related).toEqual(['glass harbour']);
+    expect(
+      cards.some((card) => card.creatorKey === 'glass harbour' || SEED_ARTIST_KEYS.has(card.creatorKey)),
+    ).toBe(false);
+  });
+
+  it('expands at most LIKED_ANCHOR_LIMIT liked anchors per refill', async () => {
+    const catalog = new LikedAnchorCatalog();
+    const likedAnchors = Array.from({ length: LIKED_ANCHOR_LIMIT + 1 }, (_, index) => ({
+      name: `Liked ${index}`,
+      creatorKey: `liked ${index}`,
+    }));
+
+    await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), { likedAnchors });
+
+    expect(LIKED_ANCHOR_LIMIT).toBeLessThan(likedAnchors.length);
+    expect(catalog.resolved).toHaveLength(LIKED_ANCHOR_LIMIT);
+  });
+
+  it('spends the enrichment budget round-robin across anchors, not anchor by anchor', async () => {
+    const catalog = new RotationCatalog(ROTATION, 4);
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set());
+
+    expect(catalog.enriched.slice(0, 4)).toEqual(['a one', 'b one', 'a two', 'b two']);
+    expect(cards.map((card) => card.creatorKey)).toEqual(['a one', 'b one', 'a two', 'b two']);
+  });
+
+  it('does not enrich a candidate the pool already holds', async () => {
+    const catalog = new RotationCatalog(ROTATION, 6);
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+      poolCreatorKeys: new Set(['a one']),
+    });
+
+    expect(catalog.enriched).not.toContain('a one');
+    expect(cards.some((card) => card.creatorKey === 'a one')).toBe(false);
   });
 });

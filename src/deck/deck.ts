@@ -9,7 +9,7 @@ import type {
   Seed,
   TasteWeights,
 } from '../types';
-import { generateCandidates } from './generate';
+import { generateCandidates, type LikedAnchor } from './generate';
 
 // Hot path (ARCHITECTURE §deck): a swipe is one synchronous commit. Network work
 // only ever happens in refill, off the commit path.
@@ -87,6 +87,14 @@ export function createDeck(init: DeckInit): Deck {
     swipes: 0,
   };
   let pending: Promise<DeckState> | null = null;
+  // Artists liked this deck, most recent first: second-hop anchors for the next
+  // refill. `generateCandidates` caps how many of them it expands.
+  const likedAnchors: LikedAnchor[] = [];
+  const rememberLiked = (card: Card) => {
+    const at = likedAnchors.findIndex((anchor) => anchor.creatorKey === card.creatorKey);
+    if (at !== -1) likedAnchors.splice(at, 1);
+    likedAnchors.unshift({ name: card.creator, creatorKey: card.creatorKey });
+  };
 
   // Unseen, above the quality floor (story 10), best first, each carrying the
   // `because you like X` its current score supports.
@@ -105,7 +113,10 @@ export function createDeck(init: DeckInit): Deck {
   const refill = (): Promise<DeckState> => {
     pending ??= (async () => {
       try {
-        const generated = await generateCandidates(init.catalog, init.seeds, init.cardType, seen);
+        const generated = await generateCandidates(init.catalog, init.seeds, init.cardType, seen, {
+          likedAnchors,
+          poolCreatorKeys: new Set(state.pool.map((card) => card.creatorKey)),
+        });
         const pool = ranked(state.taste, [...state.pool, ...generated]);
         state = {
           ...state,
@@ -139,7 +150,10 @@ export function createDeck(init: DeckInit): Deck {
     seen.add(current.key);
     init.sink?.setTaste(taste);
     init.sink?.markSeen(current.key);
-    if (reaction.reaction === 'like') init.sink?.addLiked(likedFrom(current));
+    if (reaction.reaction === 'like') {
+      init.sink?.addLiked(likedFrom(current));
+      rememberLiked(current);
+    }
 
     const pool = ranked(taste, state.pool.slice(1));
     state = {
