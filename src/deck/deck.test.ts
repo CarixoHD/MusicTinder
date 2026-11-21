@@ -14,6 +14,7 @@ import {
   type TasteWeights,
 } from '../types';
 import { createDeck, PREFETCH_AHEAD } from './deck';
+import { WAIT_ARTIST_LIMIT } from './generate';
 
 const ADA: Seed = {
   id: 'seed-ada',
@@ -260,6 +261,51 @@ class CoolingUntaggableCatalog extends FakeCatalog {
   override async enrichArtist(_name: string, options?: LookupOptions) {
     if (options?.waitForBudget !== true) throw new CatalogError('budget', 'iTunes is cooling down');
     return null;
+  }
+}
+
+/**
+ * The first artists the bounded wait checks have no iTunes genre; every later
+ * one is refused by the spent budget until `cooling` clears, then gets tags.
+ */
+class CoolingThenTaggedCatalog implements Catalog {
+  cooling = true;
+  tag = true;
+  readonly enrichCalls: { name: string; wait: boolean }[] = [];
+  readonly cards: Card[] = Array.from({ length: 10 }, (_, index) => artistCard(200 + index, 'rock'));
+
+  async searchSeeds(): Promise<SeedCandidate[]> {
+    return [];
+  }
+
+  async resolveDeezerArtist(name: string) {
+    return { id: 1, name };
+  }
+
+  async relatedArtists(_deezerArtistId: number, limit: number): Promise<Card[]> {
+    return this.cards.slice(0, limit);
+  }
+
+  async enrichArtist(name: string, options?: LookupOptions) {
+    const wait = options?.waitForBudget === true;
+    this.enrichCalls.push({ name, wait });
+    const index = this.cards.findIndex((card) => card.creatorKey === name.trim().toLowerCase());
+    const itunesArtistId = 2000 + index;
+    if (index < WAIT_ARTIST_LIMIT) return { itunesArtistId, chips: [] };
+    if (this.cooling && !wait) throw new CatalogError('budget', 'iTunes is cooling down');
+    return { itunesArtistId, chips: this.tag ? ['rock'] : [] };
+  }
+
+  async artistTopTracks(): Promise<Card[]> {
+    return [];
+  }
+
+  async artistAlbums(): Promise<Card[]> {
+    return [];
+  }
+
+  async samplePreview(): Promise<Sample | undefined> {
+    return undefined;
   }
 }
 
@@ -532,12 +578,60 @@ describe('deck refill', () => {
     expect(state.pool.length).toBeGreaterThan(0);
   });
 
-  it('ends a fresh deck empty, not stalled, when the cool-down outlasts every waited artist', async () => {
+  it('ends a fresh deck in a retryable cool-down, not empty, when the budget left artists unchecked', async () => {
     const deck = createDeck({
       catalog: new CoolingUntaggableCatalog(),
       seeds: [ADA],
       cardType: 'artist',
       taste: initTaste([ADA]),
+    });
+
+    const state = await deck.refill();
+
+    // The first six related artists were checked and had no genre; the rest
+    // were never checked because the budget refused them. Blaming the seeds
+    // (or claiming an outage) would both be wrong: a retry can still find cards.
+    expect(state.status).toBe('cooling');
+    expect(state.emptyReason).toBeNull();
+    expect(state.pool).toEqual([]);
+  });
+
+  it('retries the artists the budget refused once the window refills and deals their cards', async () => {
+    const catalog = new CoolingThenTaggedCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+
+    const cooling = await deck.refill();
+
+    expect(cooling.status).toBe('cooling');
+    expect(cooling.pool).toEqual([]);
+    // Only the bounded wait's artists were checked; the rest were refused.
+    expect(catalog.enrichCalls.filter((call) => call.wait)).toHaveLength(WAIT_ARTIST_LIMIT);
+    expect(catalog.enrichCalls.slice(WAIT_ARTIST_LIMIT).every((call) => !call.wait)).toBe(true);
+
+    catalog.cooling = false;
+    const dealt = await deck.refill();
+
+    expect(dealt.status).toBe('dealing');
+    expect(dealt.emptyReason).toBeNull();
+    expect(dealt.pool.map((card) => card.creatorKey).sort()).toEqual(
+      catalog.cards.slice(WAIT_ARTIST_LIMIT).map((card) => card.creatorKey).sort(),
+    );
+  });
+
+  it('reports no candidates when every related artist was checked and yielded nothing', async () => {
+    const catalog = new CoolingThenTaggedCatalog();
+    catalog.cooling = false;
+    catalog.tag = false;
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
     });
 
     const state = await deck.refill();
