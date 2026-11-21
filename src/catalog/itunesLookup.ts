@@ -5,6 +5,7 @@ import {
   type Chip,
   type LookupOptions,
   type ReleaseType,
+  type Sample,
   type SampleOptions,
 } from '../types';
 import { withItunesBudget, type BudgetOptions } from './budget';
@@ -241,31 +242,38 @@ export async function artistAlbums(
  * than an error. An exhausted budget is not such a failure: with
  * `waitForBudget` the lookup waits for the next token (and can be abandoned
  * with `signal`), so a cooling-deck card still gets its sample. Song cards
- * already carry theirs.
+ * already carry theirs. The sample names its song so the card can show it.
  */
-export async function samplePreview(card: Card, options: SampleOptions = {}): Promise<string | undefined> {
-  if (card.kind === 'song') return card.previewUrl;
+export async function samplePreview(card: Card, options: SampleOptions = {}): Promise<Sample | undefined> {
+  if (card.kind === 'song') {
+    return card.previewUrl ? { previewUrl: card.previewUrl, title: card.title } : undefined;
+  }
   const budget: BudgetOptions = {
     wait: options.waitForBudget ?? false,
     priority: options.priority ?? false,
     signal: options.signal,
   };
 
+  const sampleOf = (result?: ItunesResult): Sample | undefined =>
+    result?.previewUrl ? { previewUrl: result.previewUrl, title: result.trackName } : undefined;
+
   try {
     if (card.kind === 'album') {
       const id = albumIdOf(card.key);
       if (id === undefined) return undefined;
       const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${PREVIEW_LIMIT}`, budget);
-      return songs?.find((song) => song.previewUrl)?.previewUrl;
+      return sampleOf(songs?.find((song) => song.previewUrl));
     }
 
     const results = await lookupResults(
       `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${PREVIEW_LIMIT}`,
       budget,
     );
-    return results?.find(
-      (result) => result.previewUrl && nameScore(card.creator, result.artistName ?? '') > 0,
-    )?.previewUrl;
+    return sampleOf(
+      results?.find(
+        (result) => result.previewUrl && nameScore(card.creator, result.artistName ?? '') > 0,
+      ),
+    );
   } catch {
     // Network failure or an exhausted budget: the card reads "No sample".
     return undefined;
