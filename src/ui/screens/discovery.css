@@ -7,14 +7,18 @@
 /* The inline retry takes a row of its own: give the card that much less
    height so the like/skip buttons stay clear of the tab bar. */
 .deck:has(> .deck-notice) .deck__stack {
-  max-width: min(100%, max(220px, calc(100svh - 544px)));
+  max-width: min(100%, max(200px, calc(100svh - 604px)));
 }
 
 .deck__stack {
   position: relative;
   /* Keep the card and its controls clear of the fixed tab bar on short
-     viewports, but never below most of the column: the artwork is the hero. */
-  max-width: min(100%, max(85%, calc(100svh - 480px)));
+     viewports. The height budget wins over any width floor and covers a
+     two-line title: 56 header + 20 top padding + 76 title (two 38 px display
+     lines at the floor) + meta, peek, gap, 56 px buttons and the 64 px tab
+     bar. The 200 px floor is what fits at 1280x600; a two-line 34 px title is
+     taller than the 28 px one the budget was first drawn for. */
+  max-width: min(100%, max(200px, calc(100svh - 540px)));
   /* Auto cross-axis margins stop the column stretch, so without an explicit
      width the card shrink-wraps its text and the artwork shrinks with it. */
   width: 100%;
@@ -91,7 +95,7 @@
 .deck-loading__skeleton {
   display: flex;
   width: 100%;
-  max-width: min(100%, max(85%, calc(100svh - 480px)));
+  max-width: min(100%, max(200px, calc(100svh - 540px)));
   flex-direction: column;
   gap: var(--space-3);
   margin-inline: auto;
