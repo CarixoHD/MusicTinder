@@ -38,3 +38,6 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a composed Catalog method changes its backend for one caller (Setup typing), check every other caller of that method (generation's genre anchors) and add a createCatalog-level test that covers them.
 - (design review) Deck height caps must let the viewport-height term win over any width floor (no max(85%, …)), and must budget for a two-line title; check that at 1280x600 and 360x640 with a long title on top.
 - (design review) A sub-screen reached from a tab (Setup inside Discover) must keep that tab highlighted and aria-current, or the nav looks broken.
+- (milestone review) A 'wait for the first card' allowance must last until a card actually exists, not apply to a fixed index: if the first candidate yields nothing, the next lookup must be allowed to wait too, or a cool-down still reads as an outage.
+- (milestone review) A retryable failure state shown on a card ('Finding sample') needs its own retry timer with backoff and a final fallback; relying on the browser's 'online' event leaves server errors and timeouts stuck forever.
+- (milestone review) When a layout change shrinks a component (compact deck at 1280x600), recheck the text overlays other issues place inside it and retake their screenshots on the merged code.
