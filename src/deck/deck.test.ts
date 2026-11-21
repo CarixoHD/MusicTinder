@@ -87,9 +87,10 @@ class FixedCatalog implements Catalog {
 
 class FlakyCatalog extends FixedCatalog {
   failing = true;
+  kind: 'network' | 'rate' = 'network';
 
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
-    if (this.failing) throw new CatalogError('network', 'offline');
+    if (this.failing) throw new CatalogError(this.kind, this.kind);
     return super.relatedArtists(deezerArtistId, limit);
   }
 }
@@ -209,12 +210,31 @@ describe('deck refill', () => {
     const stalled = await deck.refill();
     expect(stalled.status).toBe('stalled');
     expect(stalled.pool).toEqual([]);
+    expect(stalled.failure).toBe('network');
 
     catalog.failing = false;
     const retried = await deck.refill();
 
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
+    expect(retried.failure).toBeNull();
+  });
+
+  it('names a budget cool-down as a rate failure so the notice offers the right retry', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    catalog.kind = 'rate';
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'album',
+      taste: initTaste([ANCHOR]),
+    });
+
+    const stalled = await deck.refill();
+
+    expect(stalled.status).toBe('stalled');
+    expect(stalled.emptyReason).toBeNull();
+    expect(stalled.failure).toBe('rate');
   });
 
   it('keeps the cards in hand after a background refill fails and asks to try again', async () => {

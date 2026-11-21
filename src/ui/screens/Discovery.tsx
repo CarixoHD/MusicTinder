@@ -235,6 +235,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
           <DeckNotice
             status={state.status}
             emptyReason={state.emptyReason}
+            failure={state.failure}
             hasCards={false}
             onRetry={freshDeck}
             onChangeSeeds={() => withTransition(() => setScreen('setup'))}
@@ -284,6 +285,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       <DeckNotice
         status={state.status}
         emptyReason={state.emptyReason}
+        failure={state.failure}
         hasCards
         onRetry={freshDeck}
         onChangeSeeds={() => withTransition(() => setScreen('setup'))}

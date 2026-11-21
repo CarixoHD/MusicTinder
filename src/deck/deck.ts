@@ -1,13 +1,15 @@
 import { applyFeedback, rank, score } from '../taste/taste';
-import type {
-  Card,
-  CardKind,
-  Catalog,
-  DeckStatus,
-  LikedItem,
-  Reaction,
-  Seed,
-  TasteWeights,
+import {
+  CatalogError,
+  type Card,
+  type CardKind,
+  type Catalog,
+  type CatalogErrorKind,
+  type DeckStatus,
+  type LikedItem,
+  type Reaction,
+  type Seed,
+  type TasteWeights,
 } from '../types';
 import { generateCandidates } from './generate';
 
@@ -50,6 +52,8 @@ export interface DeckState {
   status: DeckStatus;
   /** null whenever the pool has cards; drives the Discovery zero-candidates copy. */
   emptyReason: EmptyReason;
+  /** Why the last refill failed; drives the retry copy so a rate cool-down is not blamed on the connection. */
+  failure: CatalogErrorKind | null;
   taste: TasteWeights;
   /** Swipes since the last successful refill; drives the refill cadence. */
   swipes: number;
@@ -83,6 +87,7 @@ export function createDeck(init: DeckInit): Deck {
     pool: [],
     status: 'dealing',
     emptyReason: null,
+    failure: null,
     taste: init.taste,
     swipes: 0,
   };
@@ -117,12 +122,17 @@ export function createDeck(init: DeckInit): Deck {
               : generated.length === 0 && seen.size === 0
                 ? 'no-candidates'
                 : 'filtered',
+          failure: null,
           swipes: 0,
         };
-      } catch {
+      } catch (error) {
         // A rejected refill keeps the cards already in hand and surfaces
         // `stalled` so the caller can offer a retry.
-        state = { ...state, status: 'stalled' };
+        state = {
+          ...state,
+          status: 'stalled',
+          failure: error instanceof CatalogError ? error.kind : 'unknown',
+        };
       }
       return state;
     })().finally(() => {

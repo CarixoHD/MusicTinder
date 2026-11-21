@@ -136,6 +136,13 @@ class FailingEnrichmentCatalog extends DeeperCatalog {
   }
 }
 
+/** Every enrichment cools down: a transient budget failure, not "nothing there". */
+class CoolingCatalog extends DeeperCatalog {
+  override async enrichArtist(): Promise<never> {
+    throw new CatalogError('rate', 'iTunes is cooling down');
+  }
+}
+
 /** Related artists resolve, but every release lookup fails: a partial outage. */
 class FailingReleasesCatalog extends DeeperCatalog {
   override async artistAlbums(): Promise<Card[]> {
@@ -269,6 +276,15 @@ describe('generateCandidates', () => {
       generateCandidates(new FailingReleasesCatalog(), ARTIST_SEEDS, 'album', new Set()),
     ).rejects.toBeInstanceOf(CatalogError);
   });
+
+  it.each(['album', 'song'] as const)(
+    'rejects as a rate error when %s enrichment cools down, not as a dry deck',
+    async (cardType) => {
+      await expect(
+        generateCandidates(new CoolingCatalog(), ARTIST_SEEDS, cardType, new Set()),
+      ).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+    },
+  );
 
   it('treats a catalog answer of "nothing there" as an empty deck, not an outage', async () => {
     const cards = await generateCandidates(new NotFoundCatalog(), ARTIST_SEEDS, 'artist', new Set());
