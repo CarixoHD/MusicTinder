@@ -10,6 +10,7 @@ const SEED: Seed = {
   deezerArtistId: 4101,
   chips: ['electronic', 'ambient'],
   creatorKey: 'ada vale',
+  image: 'https://cdn.example.test/artists/9101.jpg',
 };
 
 const LIKED: LikedItem = {

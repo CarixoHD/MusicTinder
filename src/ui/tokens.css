@@ -8,6 +8,8 @@
   --text-display-line: 38px;
   --text-display-weight: 700;
   --text-display-tracking: -0.5px;
+  --text-display-long-size: 28px;
+  --text-display-long-line: 32px;
   --text-title-size: 22px;
   --text-title-line: 26px;
   --text-title-weight: 600;
@@ -29,12 +31,15 @@
   --bg-glass: rgba(18, 20, 24, 0.72);
   --bg-elevated: #131519;
   --bg-subtle: #1b1d22;
+  --surface-1: #111214;
+  --surface-2: #1b1d22;
   --bg-scrim: rgba(0, 0, 0, 0.5);
   --border-hairline: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.16);
   --text-primary: #f7f8f8;
   --text-secondary: #9ba0a6;
   --text-tertiary: #858b94;
+  --text-muted: #858b94;
   --accent: #8b8ff0;
   --accent-subtle: rgba(139, 143, 240, 0.14);
   --like: var(--accent);
@@ -52,6 +57,7 @@
   --space-10: 56px;
 
   --radius-card: 16px;
+  --radius-surface: 20px;
   --radius-sheet: 24px;
   --radius-control: 10px;
   --radius-pill: 999px;
@@ -81,12 +87,15 @@
   --bg-glass: rgba(255, 255, 255, 0.72);
   --bg-elevated: #ffffff;
   --bg-subtle: #f0f0ee;
+  --surface-1: #ffffff;
+  --surface-2: #f0f0ee;
   --bg-scrim: rgba(0, 0, 0, 0.32);
   --border-hairline: rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.16);
   --text-primary: #16181d;
   --text-secondary: #565b63;
   --text-tertiary: #686d74;
+  --text-muted: #686d74;
   --accent: #4f56c7;
   --accent-subtle: rgba(79, 86, 199, 0.1);
   --danger: #b3402c;
@@ -101,12 +110,15 @@
     --bg-glass: rgba(255, 255, 255, 0.72);
     --bg-elevated: #ffffff;
     --bg-subtle: #f0f0ee;
+    --surface-1: #ffffff;
+    --surface-2: #f0f0ee;
     --bg-scrim: rgba(0, 0, 0, 0.32);
     --border-hairline: rgba(0, 0, 0, 0.08);
     --border-strong: rgba(0, 0, 0, 0.16);
     --text-primary: #16181d;
     --text-secondary: #565b63;
     --text-tertiary: #686d74;
+    --text-muted: #686d74;
     --accent: #4f56c7;
     --accent-subtle: rgba(79, 86, 199, 0.1);
     --danger: #b3402c;

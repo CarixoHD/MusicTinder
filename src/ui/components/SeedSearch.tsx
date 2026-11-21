@@ -38,6 +38,7 @@ const seedFrom = (candidate: SeedCandidate): Seed | null => {
     name: candidate.name,
     chips: candidate.chips,
     creatorKey: candidate.creator.trim().toLowerCase(),
+    ...(candidate.image !== undefined && { image: candidate.image }),
   };
 
   if (candidate.deezerArtistId !== undefined) {
@@ -208,7 +209,7 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
       {view.status === 'error' && (
         <div className="search-flag search-flag--error" role="alert">
           <span>
-            {view.kind === 'rate' ? 'Apple is limiting searches right now' : "Couldn't reach the catalog"}
+            {view.kind === 'rate' ? 'Apple is limiting searches right now' : 'Couldn’t reach the catalog'}
           </span>
           <Button variant="secondary" onClick={() => setAttempt((count) => count + 1)}>
             Retry

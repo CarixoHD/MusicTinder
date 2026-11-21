@@ -24,6 +24,7 @@ interface StoredState {
   liked: { key: string; title: string; creator: string }[];
   seen: string[];
   taste: { chips: Record<string, number>; creators: Record<string, number> };
+  settings: { sound: boolean };
 }
 
 interface SeedOptions {
@@ -83,6 +84,14 @@ test('deals a card with artwork, title, creator, year, chips and a because line,
   await expect(current.locator('.tag')).not.toHaveCount(0);
   await expect(current.locator('.card__because')).toContainText(/because you like/i);
 
+  // The card is a surface, and the next one waits visibly behind it.
+  await expect(current.locator('.card')).toHaveCSS('background-color', 'rgb(17, 18, 20)');
+  await expect(current.locator('.card')).toHaveCSS('border-radius', '20px');
+  await expect(page.locator('.deck__behind .card')).toBeVisible();
+  await expect
+    .poll(() => page.locator('.deck__behind').evaluate((el) => getComputedStyle(el).transform))
+    .toContain('0.96');
+
   // At least three upcoming cards are already in the DOM behind the current one.
   expect(await page.locator('.deck__upcoming .card').count()).toBeGreaterThanOrEqual(3);
 
@@ -141,7 +150,7 @@ test('ends quietly when nothing unseen is left and Change seeds returns to Setup
   await page.goto('/');
 
   await expect(
-    page.getByRole('heading', { level: 1, name: "That's everything in this direction" }),
+    page.getByRole('heading', { level: 1, name: "That’s everything in this direction" }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Fresh deck' })).toBeVisible();
 
@@ -167,10 +176,7 @@ test('Reset drops the session deck: picking the same seed again deals from the t
   await expect(deckTitle(page)).not.toHaveText(second);
   expect(Object.keys((await stored(page))?.taste.creators ?? {})).toContain('glass harbour');
 
-  await page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Open settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await dialog.getByRole('button', { name: 'Reset all my data' }).click();
   await dialog.getByRole('button', { name: 'Delete everything' }).click();
@@ -187,4 +193,83 @@ test('Reset drops the session deck: picking the same seed again deals from the t
     creators: { 'ada vale': 0.5 },
     origins: { electronic: 'Ada Vale', 'ada vale': 'Ada Vale' },
   });
+});
+
+test('an artist card says what it is instead of repeating its name on the second line', async ({
+  page,
+}) => {
+  await seedDeck(page);
+  await page.goto('/');
+
+  const current = page.locator('.deck__current');
+  await expect(deckTitle(page)).toHaveText(/\S/);
+  const title = await deckTitle(page).innerText();
+  const creator = current.locator('.card__creator');
+  await expect(creator).toHaveText(/^Artist( · \S.*)?$/);
+  expect(await creator.innerText()).not.toBe(title);
+});
+
+test('the header sound toggle flips sound on the deck without opening Settings', async ({ page }) => {
+  await seedDeck(page);
+  await page.goto('/');
+  await expect(deckTitle(page)).toHaveText(/\S/);
+
+  const toggle = page.getByRole('button', { name: 'Sound on' });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await toggle.click();
+
+  const off = page.getByRole('button', { name: 'Sound off' });
+  await expect(off).toHaveAttribute('aria-pressed', 'false');
+  expect((await stored(page))?.settings.sound).toBe(false);
+});
+
+test('Edit seeds under the deck returns to Setup with the current seeds kept', async ({ page }) => {
+  await seedDeck(page);
+  await page.goto('/');
+  await expect(deckTitle(page)).toHaveText(/\S/);
+
+  await page.getByRole('button', { name: /Seeds:.*Edit/ }).click();
+
+  await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start discovering with 1 seed' })).toBeVisible();
+});
+
+test('the first deal shows a skeleton card while the catalog is still answering', async ({ page }) => {
+  // Delay the refill's related-artist answer so the waiting state is observable.
+  await page.route(/api\.deezer\.com\/artist\/\d+\/related/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    await route.fallback();
+  });
+  await seedDeck(page);
+  await page.goto('/');
+
+  const skeleton = page.locator('.deck-loading__skeleton');
+  await expect(skeleton).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your deck is getting ready' })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator('.deck-loading__art').evaluate((el) => getComputedStyle(el, '::after').animationName),
+    )
+    .toBe('skeleton-shimmer');
+
+  await expect(deckTitle(page)).toHaveText(/\S/);
+});
+
+test('the waiting card behind never reaches past its 10 px peek, however long its text', async ({
+  page,
+}) => {
+  await seedDeck(page);
+  await page.goto('/');
+  await expect(page.locator('.deck__behind .card')).toBeVisible();
+
+  // A next card with a much longer title than the top one must not spill out
+  // below the stack onto the like/skip buttons.
+  await page
+    .locator('.deck__behind .card__title')
+    .evaluate((el) => (el.textContent = 'A very long album title that wraps across several lines '.repeat(3)));
+
+  const stack = (await page.locator('.deck__stack').boundingBox())!;
+  const behind = (await page.locator('.deck__behind .card').boundingBox())!;
+  expect(behind.y + behind.height).toBeLessThanOrEqual(stack.y + stack.height + 11);
 });

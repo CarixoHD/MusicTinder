@@ -50,6 +50,42 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
+export function SpeakerIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 9.5h3l4-3.5v12l-4-3.5H4z" />
+      <path d="M15 8.8a4.5 4.5 0 0 1 0 6.4M17.7 6.2a8 8 0 0 1 0 11.6" />
+    </svg>
+  );
+}
+
+export function SpeakerOffIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 9.5h3l4-3.5v12l-4-3.5H4z" />
+      <path d="m15.5 9.5 5 5M20.5 9.5l-5 5" />
+    </svg>
+  );
+}
+
+/** The catalog can't be reached: a cloud with a slash, not a sad face. */
+export function CloudOffIcon(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6.5 18a4.5 4.5 0 0 1-.4-9A6 6 0 0 1 17.7 10a3.5 3.5 0 0 1-.2 7H6.5Z" />
+      <path d="m4 4 16 16" />
+    </svg>
+  );
+}
+
 /** Neutral artwork placeholder: a quiet vinyl, never a broken image. */
 export function ArtworkPlaceholder(props: IconProps) {
   return (

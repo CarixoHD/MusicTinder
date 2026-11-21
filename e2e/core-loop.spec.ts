@@ -73,7 +73,7 @@ test('cold start to a saved like survives a reload with seeds and taste intact',
   const tabbar = page.getByRole('navigation', { name: 'Main' });
   await tabbar.getByRole('button', { name: 'Liked' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Liked' })).toBeVisible();
-  await expect(page.locator('.liked-row').filter({ hasText: firstTitle })).toBeVisible();
+  await expect(page.locator('.liked-row-item').filter({ hasText: firstTitle })).toBeVisible();
 
   const before = await stored(page);
   expect(before.liked.map((item) => item.title)).toEqual([firstTitle]);
@@ -115,6 +115,10 @@ test('an iTunes cool-down at deal time leaves a retry, not a seeds problem', asy
 
   // An albums deck needs iTunes enrichment, which spends the same ~17/min budget.
   await page.getByRole('button', { name: 'Albums' }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Search scope' })
+    .getByRole('radio', { name: 'Albums' })
+    .check();
   const search = page.getByRole('searchbox', { name: 'Search albums' });
   await search.fill('ada');
   await page.getByRole('button', { name: /Ada Vale/ }).click();
@@ -124,7 +128,7 @@ test('an iTunes cool-down at deal time leaves a retry, not a seeds problem', asy
 
   // The cool-down is a failure the listener can retry, not "nothing here".
   await expect(
-    page.getByRole('heading', { level: 1, name: "Couldn't reach the catalog" }),
+    page.getByRole('heading', { level: 1, name: "Couldn’t reach the catalog" }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   await expect(

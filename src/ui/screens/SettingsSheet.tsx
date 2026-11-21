@@ -4,6 +4,7 @@ import { useStore } from '../../store/store';
 import type { Settings } from '../../types';
 import { Button } from '../Button';
 import { CloseIcon } from '../icons';
+import { withTransition } from '../transition';
 
 const MUSIC_APPS: readonly { id: MusicApp; label: string }[] = [
   { id: 'spotify', label: 'Spotify' },
@@ -25,6 +26,7 @@ export default function SettingsSheet() {
   const settings = useStore((state) => state.settings);
   const setSettings = useStore((state) => state.setSettings);
   const resetAll = useStore((state) => state.resetAll);
+  const setScreen = useStore((state) => state.setScreen);
 
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const sheetRef = useRef<HTMLElement>(null);
@@ -49,6 +51,12 @@ export default function SettingsSheet() {
   const close = () => {
     setSettingsOpen(false);
     setIsConfirmingReset(false);
+  };
+
+  // Seeds are kept: the sheet is the mid-session way back to Setup.
+  const editSeeds = () => {
+    setSettingsOpen(false);
+    withTransition(() => setScreen('setup'));
   };
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
@@ -119,17 +127,30 @@ export default function SettingsSheet() {
             <h3 id="settings-sound-label" className="setup__label">
               Sound
             </h3>
-            <div className="chip-grid">
+            <div className="switch-row">
+              <span className="screen__body">Samples play on each card.</span>
               <button
                 type="button"
                 role="switch"
-                className="chip"
+                className="switch"
+                aria-label={settings.sound ? 'Sound is on' : 'Sound is off'}
                 aria-checked={settings.sound}
                 onClick={() => setSettings({ sound: !settings.sound })}
               >
-                {settings.sound ? 'Sound is on' : 'Sound is off'}
+                <span className="switch__track" aria-hidden="true">
+                  <span className="switch__thumb" />
+                </span>
               </button>
             </div>
+          </section>
+
+          <section className="setup__section" aria-labelledby="settings-seeds-label">
+            <h3 id="settings-seeds-label" className="setup__label">
+              Your seeds
+            </h3>
+            <Button variant="secondary" onClick={editSeeds}>
+              Edit seeds
+            </Button>
           </section>
 
           <section className="setup__section" aria-labelledby="settings-theme-label">

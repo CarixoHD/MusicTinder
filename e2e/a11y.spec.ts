@@ -147,7 +147,7 @@ test('the inline retry row has no axe violations while cards stay on screen', as
     return route.fallback();
   });
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
   catalogDown = false;
 
   expect(await axeViolations(page)).toEqual([]);
@@ -167,7 +167,7 @@ test('the stalled deck screen has no axe violations', async ({ page }) => {
   });
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { level: 1, name: "Couldn't reach the catalog" })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: "Couldn’t reach the catalog" })).toBeVisible();
   catalogDown = false;
 
   expect(await axeViolations(page)).toEqual([]);
@@ -180,9 +180,10 @@ test('keyboard only: Tab adds a seed, starts the deck, then arrows like and skip
   await page.goto('/');
 
   const search = page.getByRole('searchbox', { name: 'Search artists' });
-  // Tab past the header's settings button into the seed search.
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
+  // Tab past the header and the search-scope radios into the seed search.
+  for (let step = 0; step < 10 && !(await search.evaluate((el) => el === document.activeElement)); step += 1) {
+    await page.keyboard.press('Tab');
+  }
   await expect(search).toBeFocused();
   await page.keyboard.type('ada');
 

@@ -30,13 +30,13 @@ test("seed search explains a catalog failure inline, retries, and flags no match
   await page.goto("/");
   const box = page.getByRole("searchbox", { name: "Search artists" });
   await box.fill(`Delta${stamp}`);
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
 
   fail = false;
   await page.getByRole("button", { name: "Retry" }).click();
   const hit = page.getByRole("button", { name: new RegExp(`Delta${stamp} Band`) });
   await expect(hit).toBeVisible();
-  await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeHidden();
   await hit.click();
   await expect(page.getByRole("button", { name: `Remove Delta${stamp} Band` })).toBeVisible();
 

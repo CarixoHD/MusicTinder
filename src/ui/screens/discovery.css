@@ -1,28 +1,54 @@
 /* Discovery deck: the card is the one memorable element, the controls stay quiet. */
 
 .deck {
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 /* The inline retry takes a row of its own: give the card that much less
    height so the like/skip buttons stay clear of the tab bar. */
 .deck:has(> .deck-notice) .deck__stack {
-  max-width: min(100%, max(220px, calc(100svh - 444px)));
+  max-width: min(100%, max(220px, calc(100svh - 544px)));
 }
 
 .deck__stack {
   position: relative;
   /* Keep the card and its controls clear of the fixed tab bar on short
      viewports, but never below most of the column: the artwork is the hero. */
-  max-width: min(100%, max(80%, calc(100svh - 380px)));
+  max-width: min(100%, max(85%, calc(100svh - 480px)));
   /* Auto cross-axis margins stop the column stretch, so without an explicit
      width the card shrink-wraps its text and the artwork shrinks with it. */
   width: 100%;
-  margin-inline: auto;
+  /* Room for the 10 px peek of the card behind. */
+  margin: 0 auto 10px;
 }
 
-/* The next cards are laid out but invisible: they are the prefetch buffer, so
-   artwork and text are decoded before a swipe promotes them. */
+.deck__current {
+  position: relative;
+  z-index: 1;
+}
+
+/* The next card waits visibly behind the top one, so a swipe has a destination. */
+.deck__behind {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  /* Scaling from the bottom edge keeps the 10 px peek visible at rest. */
+  transform-origin: 50% 100%;
+  transform: scale(0.96) translateY(10px);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* A stronger edge keeps the waiting card legible at 60% opacity on both themes.
+   It takes the top card's height, so a longer title never spills out below. */
+.deck__behind .card {
+  height: 100%;
+  overflow: hidden;
+  border-color: var(--border-strong);
+}
+
+/* The rest of the prefetch buffer is laid out but invisible: their artwork and
+   text are decoded before a swipe promotes them. */
 .deck__upcoming {
   position: absolute;
   inset: 0;
@@ -35,7 +61,104 @@
   display: flex;
   justify-content: center;
   gap: var(--space-7);
-  padding-top: var(--space-2);
+}
+
+/* Quiet way back to Setup mid-session, under the deck. */
+.deck__seeds {
+  min-height: var(--tap-target);
+  align-self: center;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line);
+  font-weight: var(--text-meta-weight);
+  text-align: center;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.deck__seeds:hover {
+  color: var(--text-primary);
+}
+
+/* Waiting state: a skeleton in the dealt card's geometry, copy under it. */
+.deck-loading {
+  gap: var(--space-5);
+}
+
+.deck-loading__skeleton {
+  display: flex;
+  width: 100%;
+  max-width: min(100%, max(85%, calc(100svh - 480px)));
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-inline: auto;
+  padding: 12px 12px 16px;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-surface);
+  background: var(--surface-1);
+}
+
+.deck-loading__art {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+
+.deck-loading__art::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  transform: translateX(-100%);
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.deck-loading__bar {
+  display: block;
+  width: 60%;
+  height: 14px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+}
+
+.deck-loading__bar--wide {
+  width: 85%;
+}
+
+.deck-loading__copy {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-title-size);
+  line-height: var(--text-title-line);
+  font-weight: var(--text-title-weight);
+  letter-spacing: var(--text-title-tracking);
+}
+
+.deck-loading__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-body-size);
+  line-height: 1.5;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-loading__art::after {
+    animation: none;
+    opacity: 0;
+  }
 }
 
 /* Inline failure state (story 15): one quiet row above the deck, never an overlay. */
@@ -51,10 +174,6 @@
   color: var(--text-secondary);
   font-size: var(--text-meta-size);
   line-height: var(--text-meta-line);
-}
-
-.deck-notice .button--secondary {
-  background: var(--bg-elevated);
 }
 
 .deck-notice__text {

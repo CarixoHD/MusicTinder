@@ -25,21 +25,34 @@
   list-style: none;
 }
 
+.liked-row-item {
+  position: relative;
+}
+
+/* Transparent link covering the whole visual row. */
 .liked-row {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--radius-control);
+  text-decoration: none;
+}
+
+.liked-row__visual {
   display: flex;
+  min-height: var(--space-10);
   align-items: center;
   gap: var(--space-3);
-  min-height: var(--space-10);
   padding: var(--space-2);
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-control);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  text-decoration: none;
+  pointer-events: none;
   transition: background-color var(--duration-fast) var(--ease-standard);
 }
 
-.liked-row:hover {
+.liked-row:hover + .liked-row__visual {
   background: var(--bg-subtle);
 }
 

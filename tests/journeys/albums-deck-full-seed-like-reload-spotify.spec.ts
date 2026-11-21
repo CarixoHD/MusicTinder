@@ -38,6 +38,7 @@ test("two artists, an album and two genres on an Albums deck; likes by button an
     await page.getByRole("button", { name: new RegExp(`${n} Band`) }).click();
   }
   await page.getByRole("button", { name: "Albums", exact: true }).click();
+  await page.getByRole("radiogroup", { name: "Search scope" }).getByRole("radio", { name: "Albums" }).check();
   await page.getByRole("searchbox", { name: "Search albums" }).fill(`Blue${stamp}`);
   await page.getByRole("button", { name: new RegExp(`Blue${stamp} LP`) }).click();
   await page.getByRole("button", { name: "Jazz" }).click();

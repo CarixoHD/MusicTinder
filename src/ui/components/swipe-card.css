@@ -17,8 +17,8 @@
   cursor: grabbing;
 }
 
-/* The single allowed shadow belongs to the dragged card's artwork. */
-.swipe-card--dragging .card__art {
+/* The single allowed shadow belongs to the dragged card's surface. */
+.swipe-card--dragging .card {
   box-shadow: var(--shadow-drag);
 }
 

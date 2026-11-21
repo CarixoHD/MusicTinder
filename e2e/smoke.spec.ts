@@ -17,7 +17,9 @@ test('a fresh profile opens the setup shell on the dark canvas', async ({ page }
   await expect(tabbar).toBeVisible();
   await expect(tabbar.getByRole('button', { name: 'Discover' })).toBeVisible();
   await expect(tabbar.getByRole('button', { name: 'Liked' })).toBeVisible();
-  await expect(tabbar.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
+  // Settings is a sheet from the header, not a third tab.
+  await expect(tabbar.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Open settings' })).toBeVisible();
 });
 
 test('index.html links the manifest and the apple-touch-icon', async ({ page }) => {
@@ -116,7 +118,7 @@ test('the tabs move between screens and open the settings sheet', async ({ page 
   await tabbar.getByRole('button', { name: 'Liked' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Nothing saved yet' })).toBeVisible();
 
-  await tabbar.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Open settings' }).click();
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Close settings' }).click();

@@ -88,11 +88,11 @@ test('a refill failure after the first deal keeps dealt cards swipeable with an 
   setCatalogDown(true);
 
   await swipe(page, 'ArrowRight');
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
 
   // Already-dealt cards still like and skip; the failure never becomes a screen.
   await expect(page.getByRole('heading', { name: 'Your deck is getting ready' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: "That's everything in this direction" })).toHaveCount(
+  await expect(page.getByRole('heading', { name: "That’s everything in this direction" })).toHaveCount(
     0,
   );
   await expect(page.getByRole('button', { name: 'Like', exact: true })).toBeEnabled();
@@ -100,7 +100,7 @@ test('a refill failure after the first deal keeps dealt cards swipeable with an 
 
   for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight'] as const) {
     await swipe(page, key);
-    await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+    await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
   }
   const afterOfflineSwipes = await stored(page);
   expect(afterOfflineSwipes.seen.length).toBeGreaterThanOrEqual(5);
@@ -116,10 +116,10 @@ test('a refill failure after the first deal keeps dealt cards swipeable with an 
   await page.getByRole('button', { name: 'Retry' }).click();
   await refillRequest;
 
-  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toHaveCount(0);
   await expect(deckTitle(page)).toHaveText(/\S/);
   await swipe(page, 'ArrowRight');
-  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toHaveCount(0);
 });
 
 test('a first refill failure explains itself inline and Retry deals once the catalog is back', async ({
@@ -132,7 +132,7 @@ test('a first refill failure explains itself inline and Retry deals once the cat
 
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: "Couldn't reach the catalog" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: "Couldn’t reach the catalog" })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Your deck is getting ready' })).toHaveCount(0);
   await expect(page.locator('.deck__current')).toHaveCount(0);
 
@@ -140,7 +140,7 @@ test('a first refill failure explains itself inline and Retry deals once the cat
   await page.getByRole('button', { name: 'Retry' }).click();
 
   await expect(deckTitle(page)).toHaveText(/\S/);
-  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toHaveCount(0);
 });
 
 test('going back online retries the refill without a tap', async ({ page }) => {
@@ -152,12 +152,12 @@ test('going back online retries the refill without a tap', async ({ page }) => {
   await expect(deckTitle(page)).toHaveText(/\S/);
   setCatalogDown(true);
   await swipe(page, 'ArrowRight');
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
 
   setCatalogDown(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
 
-  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toHaveCount(0);
 });
 
 test('seeds with no candidates explain themselves and Change seeds returns to Setup', async ({
