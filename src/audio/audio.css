@@ -74,7 +74,7 @@
   transition: stroke-dashoffset var(--duration-fast) linear;
 }
 
-/* No-preview cards: a visible, non-interactive "No sample" pill. */
+/* No-preview cards: a visible, non-interactive pill that waits or says "No sample". */
 .play-button--empty {
   display: inline-flex;
   align-items: center;
