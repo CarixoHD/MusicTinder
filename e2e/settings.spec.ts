@@ -182,9 +182,18 @@ test('turning Sound off stops the sample that is playing', async ({ page }) => {
     'false',
   );
 
-  // The sample behind the sheet is silent and the card reads as paused.
+  // The sample behind the sheet is muted, stopped, and the card reads as paused.
   await expect.poll(() => anyAudioPlaying(page)).toBe(false);
+  await expect
+    .poll(() => page.evaluate(() => [...document.querySelectorAll('audio')].every((a) => a.muted)))
+    .toBe(true);
   await expect(current.getByRole('button', { name: 'Play sample' })).toBeVisible();
+
+  await dialog.getByRole('switch', { name: 'Sound is off' }).click();
+  await expect
+    .poll(() => page.evaluate(() => [...document.querySelectorAll('audio')].every((a) => !a.muted)))
+    .toBe(true);
+  await expect.poll(() => anyAudioPlaying(page)).toBe(false);
 });
 
 test('Reset asks first: cancel keeps the data, confirming wipes it and shows Setup', async ({

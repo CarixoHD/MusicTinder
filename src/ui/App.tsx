@@ -33,7 +33,9 @@ export function App() {
 
   // Sound off silences whatever is playing now, not only the next card.
   useEffect(() => {
-    if (!sound) previewPlayer().stop();
+    const player = previewPlayer();
+    player.setMuted(!sound);
+    if (!sound) player.stop();
   }, [sound]);
 
   const ScreenView = SCREENS[screen];
