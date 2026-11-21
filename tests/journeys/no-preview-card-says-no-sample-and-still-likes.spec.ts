@@ -24,7 +24,7 @@ test("an artist with no preview shows 'No sample', is looked up only once, and c
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 6 }, () => { const d = ++id; return { id: d, name: `Kin${d}` }; }) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

@@ -19,6 +19,8 @@ export interface AppState {
   /** Bumped by resetAll() so session-held decks can never match data from before the wipe. */
   sessionEpoch: number;
   addSeed: (seed: Seed) => void;
+  /** Fill in what the catalog learned after a pick (chips, iTunes id). */
+  updateSeed: (id: string, patch: Partial<Seed>) => void;
   removeSeed: (id: string) => void;
   setSettings: (patch: Partial<Settings>) => void;
   setTaste: (taste: TasteWeights) => void;
@@ -298,6 +300,10 @@ export const useStore = create<AppState>()(
       sessionEpoch: 0,
 
       addSeed: (seed) => set((state) => ({ seeds: [...state.seeds, seed] })),
+      updateSeed: (id, patch) =>
+        set((state) => ({
+          seeds: state.seeds.map((seed) => (seed.id === id ? { ...seed, ...patch } : seed)),
+        })),
       removeSeed: (id) => set((state) => ({ seeds: state.seeds.filter((seed) => seed.id !== id) })),
       setSettings: (patch) => set((state) => ({ settings: { ...state.settings, ...patch } })),
       setTaste: (taste) => set({ taste }),

@@ -29,7 +29,7 @@ test("when the catalog drops mid-session, dealt cards still swipe and the app of
     const data = down
       ? { error: { type: "Exception", message: "Quota limit exceeded", code: 4 } }
       : u.pathname.includes("/search")
-        ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+        ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
         : { data: Array.from({ length: 2 }, () => ({ id: ++id, name: `Kin${id}` })) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

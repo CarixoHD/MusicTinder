@@ -308,6 +308,7 @@ describe('searchSeeds', () => {
     const candidates = await searchSeeds('Carpenter Brut', 'artist', { wait: true });
 
     expect(srcs[0]).toContain('/search/artist?q=Carpenter%20Brut');
+    // Same-name dedupe by fans applies here too: the 6-fan duplicate is hidden.
     expect(candidates).toEqual([
       {
         deezerArtistId: 4346304,
@@ -317,15 +318,6 @@ describe('searchSeeds', () => {
         image: 'https://cdn-images.dzcdn.net/artist/4346304/250x250.jpg',
         chips: ['other'],
         fans: 84_217,
-      },
-      {
-        deezerArtistId: 414858642,
-        kind: 'artist',
-        name: 'Carpenter Brut',
-        creator: 'Carpenter Brut',
-        image: undefined,
-        chips: ['other'],
-        fans: 6,
       },
     ]);
   });

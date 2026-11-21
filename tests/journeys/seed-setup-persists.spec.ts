@@ -16,6 +16,16 @@ test("listener seeds artists, an album and a genre; it survives a reload", async
         : [{ wrapperType: "artist", artistType: "Artist", artistName: `${term} Band`, artistId: ++id, primaryGenreName: "Electronic" }];
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ resultCount: results.length, results }) });
   });
+  // Artist search is Deezer-first (ADR-005). Related lists are empty, so the
+  // deck ends quietly and its Change seeds control returns to Setup.
+  await page.route(/api\.deezer\.com/, async (route) => {
+    const u = new URL(route.request().url());
+    const cb = u.searchParams.get("callback");
+    const data = u.pathname.includes("/search")
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
+      : { data: [] };
+    await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
+  });
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Find something new" })).toBeVisible();
