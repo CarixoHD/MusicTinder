@@ -1,0 +1,55 @@
+/* The draggable deck card. Only transform/opacity move; the shadow appears on
+   drag start and is not animated. */
+
+.swipe-card {
+  position: relative;
+  touch-action: pan-y;
+  cursor: grab;
+  user-select: none;
+}
+
+/* Artwork must not start the browser's native image drag mid-swipe. */
+.swipe-card img {
+  -webkit-user-drag: none;
+}
+
+.swipe-card--dragging {
+  cursor: grabbing;
+}
+
+/* The single allowed shadow belongs to the dragged card's artwork. */
+.swipe-card--dragging .card__art {
+  box-shadow: var(--shadow-drag);
+}
+
+.swipe-card__face {
+  will-change: opacity;
+}
+
+.swipe-label {
+  position: absolute;
+  top: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border: 2px solid currentColor;
+  border-radius: var(--radius-control);
+  background: var(--bg-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  font-size: var(--text-body-size);
+  line-height: var(--text-body-line);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.swipe-label--like {
+  right: var(--space-3);
+  color: var(--like);
+}
+
+.swipe-label--skip {
+  left: var(--space-3);
+  color: var(--danger);
+}
