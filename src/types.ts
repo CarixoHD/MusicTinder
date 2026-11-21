@@ -139,7 +139,8 @@ export interface Settings {
 
 export type DeckStatus = 'dealing' | 'empty' | 'stalled';
 
-export type CatalogErrorKind = 'network' | 'rate' | 'notfound' | 'unknown';
+/** 'budget' is the app's own iTunes allowance, not the catalog failing. */
+export type CatalogErrorKind = 'network' | 'rate' | 'budget' | 'notfound' | 'unknown';
 
 export class CatalogError extends Error {
   readonly kind: CatalogErrorKind;

@@ -150,14 +150,14 @@ class FailingEnrichmentCatalog extends DeeperCatalog {
 class MixedFailureCatalog extends DeeperCatalog {
   override async enrichArtist(name: string): Promise<never> {
     if (name.trim().toLowerCase() === 'glass harbour') throw new CatalogError('network', 'offline');
-    throw new CatalogError('rate', 'iTunes is cooling down');
+    throw new CatalogError('budget', 'iTunes is cooling down');
   }
 }
 
 /** Every enrichment cools down: a transient budget failure, not "nothing there". */
 class CoolingCatalog extends DeeperCatalog {
   override async enrichArtist(): Promise<never> {
-    throw new CatalogError('rate', 'iTunes is cooling down');
+    throw new CatalogError('budget', 'iTunes is cooling down');
   }
 }
 
@@ -537,11 +537,11 @@ describe('generateCandidates', () => {
   });
 
   it.each(['artist', 'album', 'song'] as const)(
-    'rejects as a rate error when %s enrichment cools down, not as a dry deck',
+    'rejects as a budget error when %s enrichment cools down, not as a dry deck',
     async (cardType) => {
       await expect(
         generateCandidates(new CoolingCatalog(), ARTIST_SEEDS, cardType, new Set()),
-      ).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+      ).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     },
   );
 
