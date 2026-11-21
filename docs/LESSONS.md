@@ -2,7 +2,6 @@
 
 Short lessons from building this product, written by Slopper when work needed fixing. Read them before you start: they save you from mistakes earlier agents made.
 
-- (milestone review) A deck status other than `dealing` needs its own copy: `stalled` (catalog failure) must render PRD's 'Couldn't reach the catalog' + retry, never the deck-end 'that's everything' screen, and an e2e test that aborts the catalog routes should pin it.
 - (milestone review) Once a swipe gesture starts committing (fly-out), the button and arrow-key paths must ignore input until the deck has promoted the next card; otherwise two inputs race for the same card.
 - (milestone review) Anything serialised behind the iTunes budget queue needs a fetch timeout, or one hung request blocks every later refill.
 - (#23) FakeCatalog only enriched its three anchor artists, so any album/song deck generated from it was empty (DeeperCatalog existed to work around that) and a Discovery album test rendered no card. Extending FakeCatalog.enrichArtist/artistAlbums to cover related artists made album fixtures usable directly.
@@ -42,3 +41,4 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a wildcard or exploration card is built from a search hit instead of the usual lookup, apply the same normalisation (release-type suffix, store link) as the regular card builder.
 - (milestone review) Exclude catch-all values such as the 'other' chip from exploration rotations: they match on title words, not genre.
 - (milestone review) Report the app's own budget refusal as kind 'budget' everywhere (searches included), never as 'rate', so every caller can show it as a retryable cool-down.
+- (milestone review) Height-cap fixes for one viewport (≤620 px) should be measured across the neighbouring range too (360x640, 375x667), checking every row in the deck column (seeds/edit link included), not only the buttons named in the issue.
