@@ -92,7 +92,7 @@ describe('deezer JSONP transport', () => {
 });
 
 describe('relatedArtists', () => {
-  it('maps Deezer artists to artist Cards with dz keys, picture_big images and normalised creatorKey', async () => {
+  it('maps Deezer artists to artist Cards with dz keys, picture_big images, nb_fan and normalised creatorKey', async () => {
     const { srcs } = serveScripts(() => ({
       data: [
         {
@@ -100,8 +100,9 @@ describe('relatedArtists', () => {
           name: 'Justice',
           picture_big: 'https://cdn-images.dzcdn.net/artist/99/500x500.jpg',
           picture_medium: 'https://cdn-images.dzcdn.net/artist/99/250x250.jpg',
+          nb_fan: 816_000,
         },
-        { id: 100, name: 'Daft PUNK', picture_big: 'https://cdn-images.dzcdn.net/artist/100/500x500.jpg' },
+        { id: 100, name: 'Daft PUNK', picture_big: 'https://cdn-images.dzcdn.net/artist/100/500x500.jpg', nb_fan: 5_200_000 },
       ],
     }));
 
@@ -118,6 +119,7 @@ describe('relatedArtists', () => {
         creatorKey: 'justice',
         image: 'https://cdn-images.dzcdn.net/artist/99/500x500.jpg',
         chips: [],
+        fans: 816_000,
       },
       {
         key: 'dz:artist:100',
@@ -128,6 +130,7 @@ describe('relatedArtists', () => {
         creatorKey: 'daft punk',
         image: 'https://cdn-images.dzcdn.net/artist/100/500x500.jpg',
         chips: [],
+        fans: 5_200_000,
       },
     ]);
   });
