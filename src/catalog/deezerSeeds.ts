@@ -9,13 +9,6 @@ import { jsonp } from './deezerJsonp';
 const DEEZER_API = 'https://api.deezer.com';
 const SEARCH_LIMIT = 8;
 
-interface DeezerArtistHit {
-  id: number;
-  name: string;
-  picture_medium?: string;
-  nb_fan?: number;
-}
-
 interface DeezerList {
   data?: unknown[];
 }
