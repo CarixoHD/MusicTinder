@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { previewPlayer } from '../../audio/player';
 import { createCatalog } from '../../catalog';
 import { createDeck, type Deck, type DeckState } from '../../deck/deck';
@@ -109,6 +109,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const mounted = useRef(true);
   const cardStartedAt = useRef(0);
   const player = previewPlayer();
+  const playerState = useSyncExternalStore(player.subscribe, player.getSnapshot, player.getSnapshot);
+  // The sample URL each card handed to the player; a card that comes back
+  // 'nosample' after that means the URL failed to play, not that it is missing.
+  const playedSamples = useRef(new Map<string, string>());
+  // Cards whose failed sample has already been looked up once more.
+  const retriedSamples = useRef(new Set<string>());
 
   useEffect(() => {
     mounted.current = true;
@@ -164,10 +170,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       const sample = samples.get(card.key);
       const previewUrl = card.previewUrl ?? sample?.previewUrl;
       const sampleTitle = card.sampleTitle ?? sample?.title;
-      // A song card's silence is final; an artist/album card is "Finding
-      // sample" until a lookup answers. Only a miss may read "No sample".
-      const samplePending =
-        !previewUrl && card.kind !== 'song' && !answered.has(card.key);
+      // Any card without a preview is "Finding sample" until a lookup answers;
+      // only a miss may read "No sample". A silent song card now has a Deezer
+      // fallback too, so its silence is no longer final.
+      const samplePending = !previewUrl && !answered.has(card.key);
       return previewUrl === card.previewUrl &&
         sampleTitle === card.sampleTitle &&
         samplePending === Boolean(card.samplePending)
@@ -240,17 +246,48 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     [],
   );
 
+  // Remember which URL the player took for a card: only a sample that was
+  // actually handed over can have failed to play.
+  useEffect(() => {
+    const { key, status } = playerState;
+    const sample = key === null ? undefined : samples.get(key);
+    if (status === 'playing' && key !== null && sample) playedSamples.current.set(key, sample.previewUrl);
+  }, [playerState, samples]);
+
+  // A resolved sample that fails to play (Deezer's signed URLs expire in ~15
+  // min) is looked up once more; a second failure is a real "No sample".
+  useEffect(() => {
+    const card = state.pool[0];
+    if (!card || playerState.key !== card.key || playerState.status !== 'nosample') return;
+    const sample = samples.get(card.key);
+    if (!sample || playedSamples.current.get(card.key) !== sample.previewUrl) return;
+
+    setSamples((current) => {
+      if (!current.has(card.key)) return current;
+      const next = new Map(current);
+      next.delete(card.key);
+      return next;
+    });
+    if (retriedSamples.current.has(card.key)) {
+      setAnswered((current) => new Set(current).add(card.key));
+      return;
+    }
+    retriedSamples.current.add(card.key);
+    setRetryTick((tick) => tick + 1);
+  }, [playerState, samples, state]);
+
   // A sample that lands after the swipe already tried to play this card (its
-  // lookup was waiting out the budget) starts it now. A card the listener
-  // paused stays paused, and the first card still needs its tap.
+  // lookup was waiting out the budget) starts it now. A URL the player already
+  // had is not replayed (it failed); the lookup effect is fetching a fresh one.
+  // A card the listener paused stays paused, and the first card needs its tap.
   useEffect(() => {
     const card = state.pool[0];
     if (!sound || !card) return;
-    const snapshot = player.getSnapshot();
-    if (snapshot.key !== card.key || snapshot.status !== 'nosample') return;
+    if (playerState.key !== card.key || playerState.status !== 'nosample') return;
     const resolved = withSample(card);
-    if (resolved.previewUrl) player.play(resolved);
-  }, [player, sound, state, withSample]);
+    if (!resolved.previewUrl || playedSamples.current.get(card.key) === resolved.previewUrl) return;
+    player.play(resolved);
+  }, [player, playerState, sound, state, withSample]);
 
   // Keep the following card's sample warm. The current card loads on its first tap.
   useEffect(() => {

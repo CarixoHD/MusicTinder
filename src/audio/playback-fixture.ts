@@ -137,6 +137,11 @@ export async function mockPlaybackCatalog(page: Page): Promise<void> {
       const term = (url.searchParams.get('q') ?? '').toLowerCase();
       return reply(artistPayload(ARTISTS.filter((artist) => artist.name.toLowerCase() === term)));
     }
+    // #64's just-in-time sample sources: this fixture models a Deezer catalog
+    // with no previews, so a silent card reads No sample instead of waiting.
+    if (/^\/artist\/\d+\/top$/.test(url.pathname) || url.pathname === '/search/track') {
+      return reply({ data: [] });
+    }
     const related = /^\/artist\/(\d+)\/related$/.exec(url.pathname);
     if (!related) throw new Error(`playback fixture: unmatched Deezer request ${url.pathname}${url.search}`);
     // Only the seed's related list deals artists; a liked artist's second hop is empty.

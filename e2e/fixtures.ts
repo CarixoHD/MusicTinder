@@ -314,7 +314,12 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       payload = outcome?.empty ? { data: [] } : deezerSearch(url.searchParams);
     } else {
       const related = /^\/artist\/(\d+)\/related$/.exec(url.pathname);
+      // #64's just-in-time sample sources: this fixture models a Deezer catalog
+      // with no previews, so cards keep their iTunes sample (or No sample).
+      const sampleSource =
+        /^\/artist\/\d+\/top$/.test(url.pathname) || url.pathname === '/search/track';
       if (related) payload = deezerRelated(Number(related[1]));
+      else if (sampleSource) payload = { data: [] };
     }
     if (payload === undefined) {
       throw new Error(`mockCatalog: unmatched Deezer request ${url.pathname}${url.search}`);

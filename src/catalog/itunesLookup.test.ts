@@ -10,6 +10,33 @@ const ITUNES_LOOKUP = 'https://itunes.apple.com/lookup';
 
 const server = setupServer();
 
+const observers: MutationObserver[] = [];
+
+/**
+ * jsdom never executes external scripts, so the test plays the CDN: observe the
+ * script the real JSONP loader appends and call its global callback with the
+ * reply. Deezer has no fetch path (ADR-002), so this is the only way to serve it.
+ */
+function serveDeezer(reply: (url: string) => unknown): string[] {
+  const urls: string[] = [];
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLScriptElement)) continue;
+        urls.push(node.src);
+        const callback = new URL(node.src).searchParams.get('callback') ?? '';
+        queueMicrotask(() => {
+          const handler = (window as unknown as Record<string, unknown>)[callback];
+          if (typeof handler === 'function') (handler as (payload: unknown) => void)(reply(node.src));
+        });
+      }
+    }
+  });
+  observer.observe(document.head, { childList: true });
+  observers.push(observer);
+  return urls;
+}
+
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 
 beforeEach(() => {
@@ -21,6 +48,7 @@ beforeEach(() => {
 afterEach(() => {
   server.resetHandlers();
   vi.useRealTimers();
+  for (const observer of observers.splice(0)) observer.disconnect();
 });
 
 afterAll(() => server.close());
@@ -290,6 +318,7 @@ describe('samplePreview', () => {
   });
 
   it('resolves an artist card sample from the first hit by that artist, ignoring other artists', async () => {
+    serveDeezer(() => ({ data: [] }));
     const urls: string[] = [];
     server.use(
       http.get(ITUNES_SEARCH, ({ request }) => {
@@ -322,6 +351,7 @@ describe('samplePreview', () => {
   });
 
   it('finds the artist’s song when other artists’ hits fill the first five search results', async () => {
+    serveDeezer(() => ({ data: [] }));
     server.use(
       http.get(ITUNES_SEARCH, () =>
         HttpResponse.json({
@@ -351,6 +381,7 @@ describe('samplePreview', () => {
   });
 
   it('prefers the exact artist name over an earlier hit whose artist merely contains it', async () => {
+    serveDeezer(() => ({ data: [] }));
     server.use(
       http.get(ITUNES_SEARCH, () =>
         HttpResponse.json({
@@ -392,18 +423,21 @@ describe('samplePreview', () => {
   });
 
   it('rejects with a network CatalogError when the lookup fails, so a caller can retry', async () => {
+    serveDeezer(() => ({ data: [] }));
     server.use(http.get(ITUNES_LOOKUP, () => HttpResponse.error()));
 
     await expect(samplePreview(albumCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
   });
 
   it('rejects when Apple answers an error status instead of reporting a genuine no-match', async () => {
+    serveDeezer(() => ({ data: [] }));
     server.use(http.get(ITUNES_SEARCH, () => new HttpResponse(null, { status: 500 })));
 
     await expect(samplePreview(artistCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
   });
 
   it('rejects as a retryable budget error without fetching once the budget has cooled down', async () => {
+    serveDeezer(() => ({ data: [] }));
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
     resetItunesBudget();
@@ -414,6 +448,127 @@ describe('samplePreview', () => {
     }
     await expect(samplePreview(albumCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     expect(urls).toHaveLength(17);
+  });
+});
+
+describe('Deezer samples', () => {
+  const DZ_PREVIEW = 'https://cdnt-preview.dzcdn.net/api/1/right.mp3';
+
+  it('resolves an artist card from Deezer top tracks and makes no iTunes request', async () => {
+    const dzUrls = serveDeezer(() => ({
+      data: [
+        { id: 1, title: 'Interlude', artist: { name: 'Ada Vale' } },
+        { id: 2, title: 'Night Bus', preview: DZ_PREVIEW, artist: { name: 'Ada Vale' } },
+      ],
+    }));
+    const itunesUrls: string[] = [];
+    server.use(
+      http.get(ITUNES_SEARCH, ({ request }) => {
+        itunesUrls.push(request.url);
+        return HttpResponse.json({ resultCount: 0, results: [] });
+      }),
+      http.get(ITUNES_LOOKUP, ({ request }) => {
+        itunesUrls.push(request.url);
+        return HttpResponse.json({ resultCount: 0, results: [] });
+      }),
+    );
+
+    await expect(samplePreview(artistCard)).resolves.toEqual({
+      previewUrl: DZ_PREVIEW,
+      title: 'Night Bus',
+    });
+
+    expect(dzUrls[0]).toContain('/artist/5101/top?limit=10');
+    expect(itunesUrls).toEqual([]);
+  });
+
+  it('falls back to an iTunes song search when Deezer has no preview for the artist', async () => {
+    serveDeezer(() => ({ data: [{ id: 1, title: 'Interlude', artist: { name: 'Ada Vale' } }] }));
+    server.use(
+      http.get(ITUNES_SEARCH, () =>
+        HttpResponse.json({
+          resultCount: 1,
+          results: [
+            {
+              kind: 'song',
+              artistName: 'Ada Vale',
+              trackName: 'Right Song',
+              previewUrl: 'https://audio.example.test/right.m4a',
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(samplePreview(artistCard)).resolves.toEqual({
+      previewUrl: 'https://audio.example.test/right.m4a',
+      title: 'Right Song',
+    });
+  });
+
+  it('falls back to a Deezer track search for an album iTunes cannot match, ignoring other artists', async () => {
+    serveLookups(() => ({ resultCount: 0, results: [] }));
+    const dzUrls = serveDeezer(() => ({
+      data: [
+        {
+          id: 1,
+          title: 'Night Bus',
+          artist: { name: 'Someone Else' },
+          preview: 'https://cdnt-preview.dzcdn.net/api/1/wrong.mp3',
+        },
+        { id: 2, title: 'Late Signal', artist: { name: 'Ada Vale' }, preview: DZ_PREVIEW },
+      ],
+    }));
+
+    await expect(samplePreview({ ...albumCard, title: 'Night Bus' })).resolves.toEqual({
+      previewUrl: DZ_PREVIEW,
+      title: 'Late Signal',
+    });
+
+    expect(dzUrls[0]).toContain('/search/track?q=Ada%20Vale%20Night%20Bus');
+  });
+
+  it('falls back to a Deezer track search for a silent song card', async () => {
+    const dzUrls = serveDeezer(() => ({
+      data: [{ id: 2, title: 'Third', artist: { name: 'Ada Vale' }, preview: DZ_PREVIEW }],
+    }));
+
+    const silentSong = cardOf({ key: 'it:track:1003', kind: 'song', title: 'Third' });
+
+    await expect(samplePreview(silentSong)).resolves.toEqual({ previewUrl: DZ_PREVIEW, title: 'Third' });
+    expect(dzUrls[0]).toContain('/search/track?q=Ada%20Vale%20Third');
+  });
+
+  it('reports a genuine miss only when neither source has a preview', async () => {
+    serveLookups(() => ({ resultCount: 0, results: [] }));
+    serveDeezer(() => ({
+      data: [
+        {
+          id: 1,
+          title: 'Night Bus',
+          artist: { name: 'Someone Else' },
+          preview: 'https://cdnt-preview.dzcdn.net/api/1/wrong.mp3',
+        },
+      ],
+    }));
+
+    await expect(samplePreview({ ...albumCard, title: 'Night Bus' })).resolves.toBeUndefined();
+  });
+
+  it('keeps a Deezer preview out of the localStorage cache and asks Deezer again', async () => {
+    const dzUrls = serveDeezer(() => ({
+      data: [{ id: 2, title: 'Night Bus', preview: DZ_PREVIEW, artist: { name: 'Ada Vale' } }],
+    }));
+
+    await expect(samplePreview(artistCard)).resolves.toBeDefined();
+    await expect(samplePreview(artistCard)).resolves.toBeDefined();
+
+    // Not served from the 24 h cache: a signed URL would be stale on the next play.
+    expect(dzUrls).toHaveLength(2);
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index) ?? '';
+      expect(localStorage.getItem(key)).not.toContain('cdnt-preview.dzcdn.net');
+    }
   });
 });
 
@@ -532,6 +687,7 @@ describe('iTunes budget', () => {
   });
 
   it('answers a genuine no-preview lookup at once and never asks again', async () => {
+    serveDeezer(() => ({ data: [] }));
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
     resetItunesBudget();
