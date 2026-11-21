@@ -141,4 +141,6 @@ export interface Catalog {
   enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
   artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]>;
   artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]>;
+  /** A just-in-time preview for a card that shipped without one; undefined when there is none. */
+  samplePreview(card: Card): Promise<string | undefined>;
 }

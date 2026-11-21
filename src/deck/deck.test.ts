@@ -79,6 +79,10 @@ class FixedCatalog implements Catalog {
   async artistAlbums(): Promise<Card[]> {
     return [];
   }
+
+  async samplePreview(): Promise<string | undefined> {
+    return undefined;
+  }
 }
 
 class FlakyCatalog extends FixedCatalog {

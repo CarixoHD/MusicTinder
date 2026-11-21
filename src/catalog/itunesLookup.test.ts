@@ -1,8 +1,9 @@
 import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Card } from '../types';
 import { resetItunesBudget } from './budget';
-import { artistAlbums, artistTopTracks, enrichArtist } from './itunesLookup';
+import { artistAlbums, artistTopTracks, enrichArtist, samplePreview } from './itunesLookup';
 
 const ITUNES_SEARCH = 'https://itunes.apple.com/search';
 const ITUNES_LOOKUP = 'https://itunes.apple.com/lookup';
@@ -219,6 +220,78 @@ describe('artistAlbums', () => {
       },
     ]);
     expect(cards[0].previewUrl).toBeUndefined();
+  });
+});
+
+const cardOf = (overrides: Partial<Card> & Pick<Card, 'key' | 'kind'>): Card => ({
+  source: 'itunes',
+  title: 'Night Bus',
+  creator: 'Ada Vale',
+  creatorKey: 'ada vale',
+  chips: [],
+  ...overrides,
+});
+
+const albumCard = cardOf({ key: 'it:album:501', kind: 'album' });
+const artistCard = cardOf({ key: 'dz:artist:5101', kind: 'artist' });
+
+describe('samplePreview', () => {
+  it('resolves an album card preview from the album song lookup', async () => {
+    const urls = serveLookups(() => TRACK_RESPONSE);
+
+    await expect(samplePreview(albumCard)).resolves.toBe(
+      'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
+    );
+    expect(urls[0]).toBe('https://itunes.apple.com/lookup?id=501&entity=song&limit=5');
+  });
+
+  it('resolves an artist card preview from the first hit by that artist, ignoring other artists', async () => {
+    const urls: string[] = [];
+    server.use(
+      http.get(ITUNES_SEARCH, ({ request }) => {
+        urls.push(request.url);
+        return HttpResponse.json({
+          resultCount: 2,
+          results: [
+            { kind: 'song', artistName: 'Someone Else', previewUrl: 'https://audio.example.test/wrong.m4a' },
+            { kind: 'song', artistName: 'Ada Vale', previewUrl: 'https://audio.example.test/right.m4a' },
+          ],
+        });
+      }),
+    );
+
+    await expect(samplePreview(artistCard)).resolves.toBe('https://audio.example.test/right.m4a');
+    expect(urls[0]).toBe('https://itunes.apple.com/search?term=Ada%20Vale&media=music&entity=song&limit=5');
+  });
+
+  it('serves a repeat call for the same card from cache without a second fetch', async () => {
+    const urls = serveLookups(() => TRACK_RESPONSE);
+
+    const first = await samplePreview(albumCard);
+    const second = await samplePreview(albumCard);
+
+    expect(first).toBeDefined();
+    expect(second).toBe(first);
+    expect(urls).toHaveLength(1);
+  });
+
+  it('resolves undefined without throwing when the network fails', async () => {
+    server.use(http.get(ITUNES_LOOKUP, () => HttpResponse.error()));
+
+    await expect(samplePreview(albumCard)).resolves.toBeUndefined();
+  });
+
+  it('resolves undefined without fetching once the budget has cooled down', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    resetItunesBudget();
+    const urls = serveLookups(trackReply);
+
+    for (let id = 1; id <= 17; id += 1) {
+      await artistTopTracks(id, 1);
+    }
+    await expect(samplePreview(albumCard)).resolves.toBeUndefined();
+    expect(urls).toHaveLength(17);
   });
 });
 
