@@ -152,6 +152,15 @@ export class CatalogError extends Error {
   }
 }
 
+/**
+ * How a card-building lookup may wait on the shared iTunes budget instead of
+ * failing the refill. Only the lookups for a deck's first card pass it.
+ */
+export interface LookupOptions {
+  /** Wait for the next refill during a cool-down instead of answering "nothing to deal". */
+  waitForBudget?: boolean;
+}
+
 /** How a just-in-time preview lookup may wait on the shared iTunes budget. */
 export interface SampleOptions {
   /** Wait for the next refill during a cool-down instead of reporting no sample. */
@@ -178,9 +187,12 @@ export interface Catalog {
   ): Promise<SeedCandidate[]>;
   resolveDeezerArtist(name: string): Promise<DeezerArtistRef | null>;
   relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]>;
-  enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
-  artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]>;
-  artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]>;
+  enrichArtist(
+    name: string,
+    options?: LookupOptions,
+  ): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
+  artistTopTracks(itunesArtistId: number, limit: number, options?: LookupOptions): Promise<Card[]>;
+  artistAlbums(itunesArtistId: number, limit: number, options?: LookupOptions): Promise<Card[]>;
   /**
    * A just-in-time preview for a card that shipped without one; undefined when
    * there is none. With `waitForBudget` a cool-down is retried after a refill.

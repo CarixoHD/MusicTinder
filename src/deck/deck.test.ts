@@ -6,6 +6,7 @@ import {
   type Card,
   type Catalog,
   type Chip,
+  type LookupOptions,
   type Seed,
   type SeedCandidate,
   type TasteWeights,
@@ -94,6 +95,16 @@ class FlakyCatalog extends FixedCatalog {
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
     if (this.failing) throw new CatalogError(this.kind, this.kind);
     return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** Records whether generation was allowed to wait on the iTunes budget. */
+class RecordingCatalog extends FakeCatalog {
+  readonly enrichWaits: boolean[] = [];
+
+  override async enrichArtist(name: string, options?: LookupOptions) {
+    this.enrichWaits.push(options?.waitForBudget === true);
+    return super.enrichArtist(name);
   }
 }
 
@@ -305,6 +316,21 @@ describe('deck refill', () => {
 
     // Liking an album expands its creator, not the album itself.
     expect(spy.mock.calls.map(([deezerArtistId]) => deezerArtistId)).toContain(5101);
+  });
+
+  it('lets the first card’s lookup wait out a cool-down only while the deck has nothing', async () => {
+    const catalog = new RecordingCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ADA],
+      cardType: 'song',
+      taste: initTaste([ADA]),
+    });
+
+    const dealt = await deck.refill();
+
+    expect(dealt.status).toBe('dealing');
+    expect(catalog.enrichWaits[0]).toBe(true);
   });
 
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {
