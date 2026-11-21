@@ -176,7 +176,8 @@ describe('Discovery sample previews', () => {
     await click(button('Like'));
     const promoted = previewPlayer().getSnapshot();
     expect(promoted.status).toBe('nosample');
-    const key = promoted.key as string;
+    const { key } = promoted;
+    if (key === null) throw new Error('the swipe played no card');
 
     catalog.resolveSample(key, 'https://audio.example.test/late.m4a');
     await flush();
