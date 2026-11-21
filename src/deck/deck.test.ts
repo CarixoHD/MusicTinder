@@ -109,6 +109,30 @@ class RecordingCatalog extends FakeCatalog {
   }
 }
 
+/**
+ * The iTunes budget is cooling down: only a lookup allowed to wait gets a
+ * token, and the first related artist (Glass Harbour) has no iTunes match.
+ */
+class CoolingFirstUnknownCatalog extends FakeCatalog {
+  override async enrichArtist(name: string, options?: LookupOptions) {
+    if (options?.waitForBudget !== true) throw new CatalogError('budget', 'iTunes is cooling down');
+    return name.trim().toLowerCase() === 'glass harbour' ? null : super.enrichArtist(name);
+  }
+
+  override async artistTopTracks(itunesArtistId: number, limit: number, options?: LookupOptions) {
+    if (options?.waitForBudget !== true) throw new CatalogError('budget', 'iTunes is cooling down');
+    return super.artistTopTracks(itunesArtistId, limit);
+  }
+}
+
+/** Every related artist is unknown to iTunes while the budget cools down. */
+class CoolingUntaggableCatalog extends FakeCatalog {
+  override async enrichArtist(_name: string, options?: LookupOptions) {
+    if (options?.waitForBudget !== true) throw new CatalogError('budget', 'iTunes is cooling down');
+    return null;
+  }
+}
+
 const FAR_SHORE: Card = {
   key: 'dz:artist:6002',
   kind: 'artist',
@@ -332,6 +356,35 @@ describe('deck refill', () => {
 
     expect(dealt.status).toBe('dealing');
     expect(catalog.enrichWaits[0]).toBe(true);
+  });
+
+  it('deals a fresh deck when the first related artist has no iTunes match and the budget is cooling down', async () => {
+    const deck = createDeck({
+      catalog: new CoolingFirstUnknownCatalog(),
+      seeds: [ADA],
+      cardType: 'song',
+      taste: initTaste([ADA]),
+    });
+
+    const state = await deck.refill();
+
+    expect(state.status).toBe('dealing');
+    expect(state.pool.length).toBeGreaterThan(0);
+  });
+
+  it('ends a fresh deck empty, not stalled, when the cool-down outlasts every waited artist', async () => {
+    const deck = createDeck({
+      catalog: new CoolingUntaggableCatalog(),
+      seeds: [ADA],
+      cardType: 'artist',
+      taste: initTaste([ADA]),
+    });
+
+    const state = await deck.refill();
+
+    expect(state.status).toBe('empty');
+    expect(state.emptyReason).toBe('no-candidates');
+    expect(state.pool).toEqual([]);
   });
 
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {
