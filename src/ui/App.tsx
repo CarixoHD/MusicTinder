@@ -6,6 +6,7 @@ import Discovery from './screens/Discovery';
 import Liked from './screens/Liked';
 import SettingsSheet from './screens/SettingsSheet';
 import Setup from './screens/Setup';
+import { watchTheme } from './theme';
 
 const SCREENS: Record<Screen, ComponentType> = {
   setup: Setup,
@@ -23,11 +24,7 @@ export function App() {
   const setSettingsOpen = useStore((state) => state.setSettingsOpen);
   const theme = useStore((state) => state.settings.theme);
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'system') delete root.dataset.theme;
-    else root.dataset.theme = theme;
-  }, [theme]);
+  useEffect(() => watchTheme(theme), [theme]);
 
   const ScreenView = SCREENS[screen];
 
