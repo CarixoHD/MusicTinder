@@ -10,6 +10,7 @@ const SETTINGS: Settings = {
   sound: true,
   theme: 'system',
   cardType: 'artist',
+  wildcards: true,
 };
 
 // Newest last: the Liked list must show these in reverse.

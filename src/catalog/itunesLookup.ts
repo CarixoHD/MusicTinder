@@ -241,8 +241,9 @@ export async function artistAlbums(
 
 /**
  * First source that finds a preview wins. A failed source does not hide another
- * source's answer; the failure is only reported when neither found a sample, so
- * the caller still sees a transient error as retryable, not as "no sample".
+ * source's answer (including a genuine no-match); the failure is reported only
+ * when no source answered at all, so the caller still sees a transient error as
+ * retryable, not as "no sample".
  */
 async function firstSample(attempts: (() => Promise<Sample | undefined>)[]): Promise<Sample | undefined> {
   let failure: unknown;
@@ -317,7 +318,15 @@ export async function samplePreview(card: Card, options: SampleOptions = {}): Pr
 
   const deezerArtistId = card.kind === 'artist' ? deezerArtistIdOf(card.key) : undefined;
   if (deezerArtistId !== undefined) {
-    return firstSample([() => artistTopPreview(deezerArtistId), fromItunes]);
+    // Deezer's top list is best effort: its failure must not hide iTunes's
+    // answer, or a Deezer hiccup alone leaves the card waiting for a sample.
+    try {
+      const sample = await artistTopPreview(deezerArtistId);
+      if (sample) return sample;
+    } catch {
+      // Fall through: iTunes is the trusted source, and its failure stays retryable.
+    }
+    return fromItunes();
   }
   return firstSample([fromItunes, () => trackSearchPreview(card.creator, card.title)]);
 }

@@ -103,7 +103,13 @@ test('repairs corrupt saved data with an inline notice instead of a blank page',
   });
   expect(repaired).toEqual({
     seeds: [],
-    settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+    settings: {
+      musicApp: 'spotify',
+      sound: true,
+      theme: 'system',
+      cardType: 'artist',
+      wildcards: true,
+    },
   });
 
   await notice.getByRole('button', { name: 'Dismiss notice' }).click();

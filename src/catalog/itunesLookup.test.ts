@@ -555,6 +555,16 @@ describe('Deezer samples', () => {
     await expect(samplePreview({ ...albumCard, title: 'Night Bus' })).resolves.toBeUndefined();
   });
 
+  it('reports the genuine miss when Deezer failed but iTunes answered with no match', async () => {
+    serveDeezer(() => ({ error: { type: 'Exception', message: 'quota', code: 4 } }));
+    server.use(
+      http.get(ITUNES_SEARCH, () => HttpResponse.json({ resultCount: 0, results: [] })),
+    );
+
+    // Deezer's failure must not override the answer iTunes did give.
+    await expect(samplePreview(artistCard)).resolves.toBeUndefined();
+  });
+
   it('keeps a Deezer preview out of the localStorage cache and asks Deezer again', async () => {
     const dzUrls = serveDeezer(() => ({
       data: [{ id: 2, title: 'Night Bus', preview: DZ_PREVIEW, artist: { name: 'Ada Vale' } }],

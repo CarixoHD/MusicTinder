@@ -146,6 +146,8 @@ export interface Settings {
   sound: boolean;
   theme: 'system' | 'dark' | 'light';
   cardType: CardKind;
+  /** Deal the occasional card outside the listener's usual genres. */
+  wildcards: boolean;
 }
 
 export type DeckStatus = 'dealing' | 'empty' | 'stalled';
