@@ -16,7 +16,17 @@ const SOUND_ON = { musicApp: 'spotify', sound: true, theme: 'system' } as const;
 let container: HTMLDivElement;
 let root: Root;
 
+const advance = async (ms: number): Promise<void> => {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+};
+
 const flush = async (): Promise<void> => {
+  if (vi.isFakeTimers()) {
+    await advance(0);
+    return;
+  }
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
@@ -172,6 +182,7 @@ beforeEach(() => {
 
 afterEach(() => {
   act(() => root.unmount());
+  vi.useRealTimers();
   previewPlayer().stop();
   // Keep the player's two buffers in the body: the singleton outlives a test,
   // and a later test raises its media 'error' event to fake an expired URL.
@@ -285,6 +296,51 @@ describe('Discovery sample previews', () => {
 
     expect(catalog.callsFor(key)).toBe(2);
     expect(current().textContent).not.toContain('Finding sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
+  });
+
+  it('retries a failed lookup with backoff and shows No sample after the last attempt', async () => {
+    vi.useFakeTimers();
+    const catalog = new FlakyCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0];
+
+    expect(catalog.callsFor(key)).toBe(1);
+    expect(current().textContent).toContain('Finding sample');
+
+    await advance(1_000);
+    expect(catalog.callsFor(key)).toBe(2);
+
+    await advance(3_000);
+    expect(catalog.callsFor(key)).toBe(3);
+    expect(current().textContent).toContain('No sample');
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(playButton()).toBeNull();
+
+    // Bounded: no further attempts until something changes.
+    await advance(60_000);
+    expect(catalog.callsFor(key)).toBe(3);
+  });
+
+  it('asks a given-up lookup again when the network returns', async () => {
+    vi.useFakeTimers();
+    const catalog = new FlakyCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0];
+
+    await advance(1_000);
+    await advance(3_000);
+    expect(current().textContent).toContain('No sample');
+
+    catalog.fail = false;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await flush();
+    await flush();
+
+    expect(catalog.callsFor(key)).toBe(4);
+    expect(current().textContent).not.toContain('No sample');
     expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
   });
 

@@ -17,6 +17,10 @@ import './discovery.css';
 const tasteIsEmpty = (taste: TasteWeights) =>
   Object.keys(taste.chips).length === 0 && Object.keys(taste.creators).length === 0;
 
+// A failed sample lookup is asked again after these backoff delays; the third
+// failure settles the card on "No sample" until the network returns.
+const SAMPLE_RETRY_DELAYS_MS = [1_000, 3_000];
+
 // The deck outlives the Discovery screen: peeking at Liked and coming back is
 // normal use and must return to the same card. A session-level deck keeps the
 // pool (and its dealt-behind cards) in memory; switching seeds, card type or
@@ -106,6 +110,11 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const [retryTick, setRetryTick] = useState(0);
   // Lookups still waiting on the catalog budget, so a swipe can abandon them.
   const lookups = useRef(new Map<string, AbortController>());
+  // Failed lookups waiting on their backoff timer, and how many times each
+  // card has failed. A card that ran out of attempts is still retryable online.
+  const retryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const sampleFailures = useRef(new Map<string, number>());
+  const exhaustedSamples = useRef(new Set<string>());
   const mounted = useRef(true);
   const cardStartedAt = useRef(0);
   const player = previewPlayer();
@@ -188,8 +197,8 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   // Fire-and-forget; the deck never waits. A lookup that meets an iTunes
   // cool-down waits for a refill (the visible card ahead of the prefetch one)
   // and is abandoned when its card leaves, so it cannot hold a token the
-  // visible card needs. Only a genuine miss is recorded: a failed lookup stays
-  // retryable and is asked again when the card is current again.
+  // visible card needs. A genuine miss is recorded as "No sample"; a failure is
+  // retried with backoff and only then settles on "No sample".
   useEffect(() => {
     const wanted = [state.pool[0], deck.prefetchQueue(state)[0]].filter(
       (card): card is CardModel => card !== undefined && !card.previewUrl,
@@ -201,9 +210,21 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       controller.abort();
       lookups.current.delete(key);
     }
+    // A card that leaves cancels its pending retry: the budget is for the deck.
+    for (const [key, timer] of retryTimers.current) {
+      if (wantedKeys.has(key)) continue;
+      clearTimeout(timer);
+      retryTimers.current.delete(key);
+    }
 
     for (const card of wanted) {
-      if (lookups.current.has(card.key) || answered.has(card.key)) continue;
+      if (
+        lookups.current.has(card.key) ||
+        retryTimers.current.has(card.key) ||
+        answered.has(card.key)
+      ) {
+        continue;
+      }
       const controller = new AbortController();
       lookups.current.set(card.key, controller);
       void catalog
@@ -215,6 +236,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
         .then((sample) => {
           if (controller.signal.aborted) return;
           lookups.current.delete(card.key);
+          sampleFailures.current.delete(card.key);
           if (!sample) {
             setAnswered((current) => new Set(current).add(card.key));
             return;
@@ -223,16 +245,44 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
           setSamples((current) => new Map(current).set(card.key, sample));
         })
         .catch(() => {
-          // Not a miss: leave the card "Finding sample" and retry it later.
           lookups.current.delete(card.key);
+          if (controller.signal.aborted) return;
+          // Not a miss: ask again with backoff, then settle on "No sample"
+          // (still retryable on 'online') so the card never waits forever.
+          const failures = (sampleFailures.current.get(card.key) ?? 0) + 1;
+          sampleFailures.current.set(card.key, failures);
+          if (failures > SAMPLE_RETRY_DELAYS_MS.length) {
+            exhaustedSamples.current.add(card.key);
+            setAnswered((current) => new Set(current).add(card.key));
+            return;
+          }
+          const timer = setTimeout(() => {
+            retryTimers.current.delete(card.key);
+            if (mounted.current) setRetryTick((tick) => tick + 1);
+          }, SAMPLE_RETRY_DELAYS_MS[failures - 1]);
+          retryTimers.current.set(card.key, timer);
         });
     }
   }, [answered, catalog, deck, retryTick, state]);
 
   // A failed lookup is asked again once the network is back; the effect above
-  // also retries any card that becomes current again.
+  // also retries any card that becomes current again. Cards that ran out of
+  // attempts get their full allowance back.
   useEffect(() => {
-    const retry = () => setRetryTick((tick) => tick + 1);
+    const retry = () => {
+      for (const timer of retryTimers.current.values()) clearTimeout(timer);
+      retryTimers.current.clear();
+      sampleFailures.current.clear();
+      const givenUp = exhaustedSamples.current;
+      exhaustedSamples.current = new Set();
+      setAnswered((current) => {
+        if (![...givenUp].some((key) => current.has(key))) return current;
+        const next = new Set(current);
+        for (const key of givenUp) next.delete(key);
+        return next;
+      });
+      setRetryTick((tick) => tick + 1);
+    };
     window.addEventListener('online', retry);
     return () => window.removeEventListener('online', retry);
   }, []);
@@ -242,6 +292,8 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     () => () => {
       for (const controller of lookups.current.values()) controller.abort();
       lookups.current.clear();
+      for (const timer of retryTimers.current.values()) clearTimeout(timer);
+      retryTimers.current.clear();
     },
     [],
   );
