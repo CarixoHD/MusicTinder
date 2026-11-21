@@ -347,4 +347,27 @@ describe('deck commit', () => {
     const retried = await deck.refill();
     expect(retried.status).toBe('dealing');
   });
+
+  it('keeps the stalled failure when a failed refill drains the last cards, not a quiet deck end', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    catalog.failing = false;
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    await deck.refill();
+
+    // Offline mid-session: the refill fails, the dealt cards keep swiping.
+    catalog.failing = true;
+    await deck.refill();
+    while (deck.state.pool.length > 0) {
+      deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    }
+
+    expect(deck.state.pool).toEqual([]);
+    expect(deck.state.status).toBe('stalled');
+    expect(deck.state.emptyReason).toBeNull();
+  });
 });

@@ -145,8 +145,10 @@ export function createDeck(init: DeckInit): Deck {
     state = {
       ...state,
       pool,
-      // A failed refill stays flagged through swipes; only a refill clears it.
-      status: pool.length > 0 ? (state.status === 'stalled' ? 'stalled' : 'dealing') : 'empty',
+      // A failed refill stays flagged through swipes, even once the last dealt
+      // card is gone; only a successful refill clears it.
+      status:
+        state.status === 'stalled' ? 'stalled' : pool.length > 0 ? 'dealing' : 'empty',
       taste,
       swipes: state.swipes + 1,
     };

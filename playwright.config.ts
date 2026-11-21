@@ -11,7 +11,10 @@ const worktreePort = () => {
 const port = Number(process.env.PORT) || worktreePort();
 
 export default defineConfig({
-  testDir: './e2e',
+  // e2e/ holds the suite; tests/journeys/ holds user journeys the harness runs
+  // by path too. Everything else (src/*.test.ts) belongs to Vitest.
+  testDir: '.',
+  testMatch: ['e2e/**/*.spec.ts', 'tests/journeys/**/*.spec.ts'],
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   reporter: 'list',
