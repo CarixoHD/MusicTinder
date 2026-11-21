@@ -7,6 +7,7 @@ import { initTaste } from '../../taste/taste';
 import type { TasteWeights } from '../../types';
 import { Button } from '../Button';
 import { Card } from '../Card';
+import { DeckNotice } from '../components/DeckNotice';
 import './discovery.css';
 
 const tasteIsEmpty = (taste: TasteWeights) =>
@@ -172,6 +173,20 @@ export default function Discovery() {
       );
     }
 
+    if (state.status === 'stalled' || state.emptyReason === 'no-candidates') {
+      return (
+        <section className="screen screen--empty" aria-labelledby="discovery-title">
+          <DeckNotice
+            status={state.status}
+            emptyReason={state.emptyReason}
+            hasCards={false}
+            onRetry={freshDeck}
+            onChangeSeeds={() => setScreen('setup')}
+          />
+        </section>
+      );
+    }
+
     return (
       <section className="screen screen--empty" aria-labelledby="discovery-end-title">
         <h1 id="discovery-end-title" className="screen__title">
@@ -197,6 +212,14 @@ export default function Discovery() {
       <h1 id="discovery-title" className="sr-only">
         Discover
       </h1>
+
+      <DeckNotice
+        status={state.status}
+        emptyReason={state.emptyReason}
+        hasCards
+        onRetry={freshDeck}
+        onChangeSeeds={() => setScreen('setup')}
+      />
 
       <div className="deck__stack">
         <div className="deck__current">
