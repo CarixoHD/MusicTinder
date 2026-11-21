@@ -4,6 +4,7 @@ import { useStore } from '../../store/store';
 import type { LikedItem } from '../../types';
 import { Button } from '../Button';
 import { ArtworkPlaceholder } from '../icons';
+import { withTransition } from '../transition';
 import './liked.css';
 
 const APP_LABEL: Record<MusicApp, string> = {
@@ -51,9 +52,9 @@ function Thumb({ item }: { item: LikedItem }) {
   );
 }
 
-function LikedRow({ item, musicApp }: { item: LikedItem; musicApp: MusicApp }) {
+function LikedRow({ item, musicApp, index }: { item: LikedItem; musicApp: MusicApp; index: number }) {
   return (
-    <li>
+    <li className="liked-row-item" style={{ animationDelay: `${index * 30}ms` }}>
       <a
         className="liked-row"
         href={buildLink(item, musicApp)}
@@ -86,7 +87,7 @@ export default function Liked() {
         </h1>
         <p className="screen__body">Swipe a few cards and your finds collect here.</p>
         <div className="screen__actions">
-          <Button variant="secondary" onClick={() => setScreen('discovery')}>
+          <Button variant="secondary" onClick={() => withTransition(() => setScreen('discovery'))}>
             Go to Discover
           </Button>
         </div>
@@ -100,8 +101,8 @@ export default function Liked() {
         Liked
       </h1>
       <ul className="liked-list">
-        {[...liked].reverse().map((item) => (
-          <LikedRow key={item.key} item={item} musicApp={musicApp} />
+        {[...liked].reverse().map((item, index) => (
+          <LikedRow key={item.key} item={item} musicApp={musicApp} index={index} />
         ))}
       </ul>
     </section>
