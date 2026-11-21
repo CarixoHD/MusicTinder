@@ -184,6 +184,45 @@ class DuplicateProfileCatalog extends FakeCatalog {
   }
 }
 
+/** A seed saved in an older session carries the empty duplicate's id. */
+const DEAD_PROFILE_ID = 459_101;
+
+/** Ada Vale's name resolves to the real profile (the dead duplicate listed as an alternative). */
+class DeadStoredIdCatalog extends FakeCatalog {
+  readonly resolved: string[] = [];
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    this.resolved.push(name.trim().toLowerCase());
+    const real = await super.resolveDeezerArtist(name);
+    return real
+      ? { id: real.id, name: real.name, alternatives: [{ id: DEAD_PROFILE_ID, name: real.name }] }
+      : null;
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    return deezerArtistId === DEAD_PROFILE_ID ? [] : super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+const DEAD_SEEDS: Seed[] = [{ ...ARTIST_SEEDS[0], deezerArtistId: DEAD_PROFILE_ID }];
+
+/** Deezer answers the dead profile with an unrecognised error rather than an empty list. */
+class UnknownErrorStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    if (deezerArtistId === DEAD_PROFILE_ID) throw new CatalogError('unknown', 'deezer hiccup');
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** The catalog is down: the stored id fails with an outage, not an empty profile. */
+class OutageStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(): Promise<Card[]> {
+    throw new CatalogError('network', 'offline');
+  }
+}
+
 /** The catalog answers "nothing there" for every anchor. */
 class NotFoundCatalog extends FakeCatalog {
   override async relatedArtists(): Promise<Card[]> {
@@ -423,6 +462,53 @@ describe('generateCandidates', () => {
 
     expect(cards.length).toBeGreaterThan(0);
     expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('resolves a seed’s dead stored deezer id by name instead of dealing nothing', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual(['ada vale']);
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('resolves by name when the stored id answers with an unknown error', async () => {
+    const catalog = new UnknownErrorStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual(['ada vale']);
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
+  it('does not spend a name lookup on a stored id when the catalog is simply down', async () => {
+    const catalog = new OutageStoredIdCatalog();
+
+    await expect(generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set())).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'network',
+    });
+
+    expect(catalog.resolved).toEqual([]);
+  });
+
+  it('never retries a dead deezer id within the same generation run', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.relatedCalls.filter((id) => id === DEAD_PROFILE_ID)).toHaveLength(1);
+  });
+
+  it('makes no name lookup for a stored deezer id that has related artists', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual([]);
+    expect(cards.length).toBeGreaterThan(0);
   });
 
   it('deals candidates when every seed resolves to the duplicate-profile shape', async () => {
