@@ -6,7 +6,8 @@ import { cached } from './cache';
 /**
  * iTunes Search/Lookup adapter for artist enrichment and song/album cards.
  * Every request is cached for 24 h and spends one token from the shared budget;
- * a cool-down returns un-enriched results rather than waiting or throwing.
+ * a cool-down rejects as a `rate` error so the deck can offer a retry instead
+ * of reporting the artist or album as "not there".
  */
 
 const ITUNES_API = 'https://itunes.apple.com';
@@ -109,6 +110,13 @@ function lookupResults(path: string, reserve = 0): Promise<ItunesResult[] | null
 }
 
 /**
+ * Card-building lookups must not turn a cool-down into an empty answer: the deck
+ * would blame the seeds or claim the direction is exhausted. `samplePreview`
+ * keeps treating it as "no sample", since nothing waits on it.
+ */
+const COOLING_DOWN = 'iTunes is cooling down';
+
+/**
  * A dealt album card resolves its preview with a follow-up song lookup, and the
  * first two cards ask for one right after the deck deals. Album enrichment leaves
  * these two tokens unspent, otherwise a fresh Albums deck spends the whole budget
@@ -122,7 +130,7 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
     SAMPLE_RESERVE,
   );
-  if (results === null) return null;
+  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
 
   let bestId: number | null = null;
   let bestChips: Chip[] = [];
@@ -142,7 +150,7 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
 
 export async function artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
   const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`);
-  if (results === null) return [];
+  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }
@@ -172,7 +180,7 @@ export async function artistAlbums(itunesArtistId: number, limit: number): Promi
     `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
     SAMPLE_RESERVE,
   );
-  if (results === null) return [];
+  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }
