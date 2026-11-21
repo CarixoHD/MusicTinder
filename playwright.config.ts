@@ -1,6 +1,14 @@
 import { defineConfig, devices } from '@playwright/test';
+import { createHash } from 'node:crypto';
 
-const port = Number(process.env.PORT) || 5173;
+// Parallel worktrees share one sandbox and each runs its own dev server.
+// Derive a stable per-worktree port so they never collide on 5173; PORT wins.
+const worktreePort = () => {
+  const digest = createHash('md5').update(process.cwd()).digest();
+  return 40000 + (digest.readUInt16BE(0) % 20000);
+};
+
+const port = Number(process.env.PORT) || worktreePort();
 
 export default defineConfig({
   testDir: './e2e',
