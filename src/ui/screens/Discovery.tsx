@@ -170,10 +170,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       const sample = samples.get(card.key);
       const previewUrl = card.previewUrl ?? sample?.previewUrl;
       const sampleTitle = card.sampleTitle ?? sample?.title;
-      // A song card's silence is final; an artist/album card is "Finding
-      // sample" until a lookup answers. Only a miss may read "No sample".
-      const samplePending =
-        !previewUrl && card.kind !== 'song' && !answered.has(card.key);
+      // Any card without a preview is "Finding sample" until a lookup answers;
+      // only a miss may read "No sample". A silent song card now has a Deezer
+      // fallback too, so its silence is no longer final.
+      const samplePending = !previewUrl && !answered.has(card.key);
       return previewUrl === card.previewUrl &&
         sampleTitle === card.sampleTitle &&
         samplePending === Boolean(card.samplePending)

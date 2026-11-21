@@ -105,6 +105,16 @@ class ExpiringCatalog extends FakeCatalog {
   }
 }
 
+/** Every song card is silent, and its lookup stays pending until the test says. */
+class SilentSongCatalog extends LateCatalog {
+  override async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
+    return (await super.artistTopTracks(itunesArtistId, limit)).map((card) => ({
+      ...card,
+      previewUrl: undefined,
+    }));
+  }
+}
+
 /** A catalog whose lookups fail once, like a transient network error. */
 class FlakyCatalog extends FakeCatalog {
   readonly calls: string[] = [];
@@ -339,6 +349,22 @@ describe('Discovery sample previews', () => {
     expect(previewPlayer().getSnapshot()).toMatchObject({ status: 'playing', key });
     const sources = [...document.querySelectorAll('audio')].map((audio) => audio.getAttribute('src'));
     expect(sources).toContain(urls[1]);
+  });
+
+  it('shows Finding sample on a silent song card, and No sample only once the lookup misses', async () => {
+    const catalog = new SilentSongCatalog();
+    await renderDeck('song', catalog);
+
+    expect(current().textContent).toContain('Finding sample');
+    expect(current().textContent).not.toContain('No sample');
+
+    const key = catalog.sampleCalls[0].key;
+    catalog.resolveSample(key, undefined);
+    await flush();
+
+    expect(current().textContent).toContain('No sample');
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(catalog.callsFor(key)).toBe(1);
   });
 
   it('gives up after one retry and reads No sample when the fresh sample fails too', async () => {
