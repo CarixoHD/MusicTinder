@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
 import type { EmptyReason } from '../../deck/deck';
-import type { CatalogErrorKind, DeckStatus } from '../../types';
+import type { DeckStatus } from '../../types';
 import { Button } from '../Button';
 
 interface DeckNoticeProps {
   status: DeckStatus;
   emptyReason: EmptyReason;
-  failure: CatalogErrorKind | null;
   /** With cards in hand the notice is one quiet row; without them it is the page. */
   hasCards: boolean;
   onRetry: () => void;
@@ -21,7 +20,6 @@ interface DeckNoticeProps {
 export function DeckNotice({
   status,
   emptyReason,
-  failure,
   hasCards,
   onRetry,
   onChangeSeeds,
@@ -34,18 +32,10 @@ export function DeckNotice({
   }, [status, onRetry]);
 
   if (status === 'stalled') {
-    // A budget cool-down is Apple limiting requests for a minute, not an outage.
-    const title =
-      failure === 'rate' ? 'Apple is limiting new finds right now' : "Couldn't reach the catalog";
-    const body =
-      failure === 'rate'
-        ? 'This clears up in a minute. Try again shortly.'
-        : 'Check your connection, then try again.';
-
     if (hasCards) {
       return (
         <div className="deck-notice" role="status">
-          <p className="deck-notice__text">{title}</p>
+          <p className="deck-notice__text">Couldn&apos;t reach the catalog</p>
           <Button variant="secondary" onClick={onRetry}>
             Retry
           </Button>
@@ -56,9 +46,9 @@ export function DeckNotice({
     return (
       <div className="deck-notice deck-notice--screen" role="status">
         <h1 id="discovery-title" className="screen__title">
-          {title}
+          Couldn&apos;t reach the catalog
         </h1>
-        <p className="screen__body">{body}</p>
+        <p className="screen__body">Check your connection, then try again.</p>
         <div className="screen__actions">
           <Button variant="secondary" onClick={onRetry}>
             Retry

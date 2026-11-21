@@ -131,7 +131,7 @@ test('Setup searches that drain the iTunes budget leave a retry, not a seeds pro
 
   // The cool-down is a failure the listener can retry, not "nothing here".
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Apple is limiting new finds right now' }),
+    page.getByRole('heading', { level: 1, name: "Couldn't reach the catalog" }),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
   await expect(

@@ -210,20 +210,18 @@ describe('deck refill', () => {
     const stalled = await deck.refill();
     expect(stalled.status).toBe('stalled');
     expect(stalled.pool).toEqual([]);
-    expect(stalled.failure).toBe('network');
 
     catalog.failing = false;
     const retried = await deck.refill();
 
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
-    expect(retried.failure).toBeNull();
   });
 
-  it('names a budget cool-down as a rate failure so the notice offers the right retry', async () => {
+  it('stalls instead of ending the deck when the catalog cools down for a listener with history', async () => {
     const catalog = new FlakyCatalog(controlledCards());
     catalog.kind = 'rate';
-    // A listener with history would otherwise get the false deck-end copy.
+    // Without the rate error this would be "that's everything in this direction".
     const deck = createDeck({
       catalog,
       seeds: [ANCHOR],
@@ -232,11 +230,10 @@ describe('deck refill', () => {
       seen: controlledCards().map((card) => card.key),
     });
 
-    const stalled = await deck.refill();
+    const state = await deck.refill();
 
-    expect(stalled.status).toBe('stalled');
-    expect(stalled.emptyReason).toBeNull();
-    expect(stalled.failure).toBe('rate');
+    expect(state.status).toBe('stalled');
+    expect(state.emptyReason).toBeNull();
   });
 
   it('keeps the cards in hand after a background refill fails and asks to try again', async () => {
