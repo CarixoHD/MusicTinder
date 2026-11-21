@@ -193,11 +193,34 @@ describe('popularity dampener', () => {
     expect(rank(afterLike, [obscureNoFit, popularLikedFamily]).map((c) => c.key)).toEqual(['family', 'obscure']);
   });
 
-  it('scores a card without a fan count exactly by its taste fit', () => {
+  it('reports the undampened taste fit, so the deck floor never drops a popular card', () => {
     const taste = initTaste([GENRE_SEED]);
     const noFans = card({ key: 'no-fans', creator: 'A', creatorKey: 'a', chips: ['jazz'] });
 
     expect(score(taste, noFans).score).toBe(taste.chips.jazz);
-    expect(score(taste, { ...noFans, fans: 5_200_000 }).score).toBeLessThan(score(taste, noFans).score);
+    expect(score(taste, { ...noFans, fans: 5_200_000 }).score).toBe(taste.chips.jazz);
+    // Ordering still favours the lesser-known card.
+    expect(rank(taste, [noFans, { ...noFans, key: 'famous', fans: 5_200_000 }]).map((c) => c.key)).toEqual([
+      'no-fans',
+      'famous',
+    ]);
+  });
+
+  it('keeps a high-fan card whose only fit is its anchor above the deck quality floor', () => {
+    const taste = initTaste([ARTIST_SEED]);
+    const anchorOnly = card({
+      key: 'anchor-only',
+      creator: 'Glass Harbour',
+      creatorKey: 'glass harbour',
+      chips: ['other'],
+      related: ['ada vale'],
+      fans: 3_000_000,
+    });
+
+    expect(score(taste, anchorOnly).score).toBeGreaterThan(0);
+    expect(score(taste, anchorOnly).score).toBe(score(taste, { ...anchorOnly, fans: undefined }).score);
+    // The dampener still only orders: an equally fitting obscure card comes first.
+    const lesserKnown = { ...anchorOnly, key: 'lesser-known', fans: 12 };
+    expect(rank(taste, [anchorOnly, lesserKnown]).map((c) => c.key)).toEqual(['lesser-known', 'anchor-only']);
   });
 });
