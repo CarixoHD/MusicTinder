@@ -1,5 +1,5 @@
 import { normalizeGenre } from '../chips';
-import { CatalogError, type Card, type Chip, type SampleOptions } from '../types';
+import { CatalogError, type Card, type Chip, type ReleaseType, type SampleOptions } from '../types';
 import { withItunesBudget, type BudgetOptions } from './budget';
 import { cached } from './cache';
 
@@ -62,6 +62,16 @@ const albumIdOf = (key: string): number | undefined => {
 const yearOf = (releaseDate?: string): number | undefined => {
   const year = releaseDate ? Number(releaseDate.slice(0, 4)) : Number.NaN;
   return Number.isFinite(year) ? year : undefined;
+};
+
+/** Apple appends the release kind to single/EP album names: "Bitch - Single". */
+const RELEASE_SUFFIX = /\s+[-–]\s+(Single|EP)$/i;
+
+const releaseOf = (name: string): { title: string; releaseType?: ReleaseType } => {
+  const match = RELEASE_SUFFIX.exec(name);
+  if (!match) return { title: name };
+  const releaseType = match[1].toLowerCase() === 'ep' ? 'EP' : 'Single';
+  return { title: name.slice(0, match.index), releaseType };
 };
 
 /** Apple Music links arrive with a `uo=4` tracking parameter; the app keeps it clean. */
@@ -185,20 +195,22 @@ export async function artistAlbums(itunesArtistId: number, limit: number): Promi
   return results
     .filter((result) => result.wrapperType === 'collection' && result.collectionId !== undefined)
     .slice(0, limit)
-    .map(
-      (result): Card => ({
+    .map((result): Card => {
+      const release = releaseOf(result.collectionName ?? '');
+      return {
         key: `it:album:${result.collectionId}`,
         kind: 'album',
         source: 'itunes',
-        title: result.collectionName ?? '',
+        title: release.title,
         creator: result.artistName ?? '',
         creatorKey: creatorKey(result.artistName ?? ''),
         year: yearOf(result.releaseDate),
         image: artwork600(result.artworkUrl100),
         appleUrl: withoutTracking(result.collectionViewUrl),
+        ...(release.releaseType ? { releaseType: release.releaseType } : {}),
         chips: chipsOf(result),
-      }),
-    );
+      };
+    });
 }
 
 /**

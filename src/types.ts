@@ -36,6 +36,9 @@ export type Chip =
 
 export type CardKind = 'artist' | 'album' | 'song';
 
+/** Apple marks these in the album title ("Bitch - Single"); the card shows it as a tag. */
+export type ReleaseType = 'Single' | 'EP';
+
 export type SeedKind = 'artist' | 'album' | 'genre';
 
 export interface Seed {
@@ -87,6 +90,8 @@ export interface Card {
   image?: string;
   previewUrl?: string;
   appleUrl?: string;
+  /** Album only: the release kind Apple appends to the title, shown as a tag. */
+  releaseType?: ReleaseType;
   chips: Chip[];
   /** creatorKeys of the anchor artists this candidate came from. */
   related?: string[];
