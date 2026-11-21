@@ -18,7 +18,6 @@ test("with three electronic seeds and one R&B seed, the minority branch is still
     { id: "seed-e3", kind: "artist", name: `ElC${stamp}`, creatorKey: `elc${stamp}`, deezerArtistId: 8100003, chips: ["electronic"] },
     { id: "seed-soul", kind: "artist", name: `SoulSeed${stamp}`, creatorKey: `soulseed${stamp}`, deezerArtistId: 8100004, chips: ["r&b-soul"] },
   ];
-  const seedNameByDeezerId = new Map(seeds.map((s) => [s.deezerArtistId, s.name]));
   for (const s of seeds) { idByName.set(s.name, s.deezerArtistId); nameById.set(s.deezerArtistId, s.name); }
 
   await page.addInitScript(([json]) => {
