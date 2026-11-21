@@ -2,7 +2,6 @@
 
 Short lessons from building this product, written by Slopper when work needed fixing. Read them before you start: they save you from mistakes earlier agents made.
 
-- (#6) The landmines rule forbids mockImplementation on library/browser APIs in tests; for JSONP, observe the DOM insert with MutationObserver and invoke the generated global callback instead of stubbing appendChild.
 - (#7) Tests here must not replace fetch: use MSW (installed as msw 3.0.7). MSW 3 renames the option to `server.listen({ onUnhandledFrame: 'error' })`, and `HttpResponse.json` wants a `Record<string, any>`-compatible body, not `unknown`.
 - (#2) The test-honesty landmine treats vi.spyOn(...).mockResolvedValue on fetch as a test double; catalog network tests must use msw (MSW v3 option is onUnhandledFrame, not onUnhandledRequest).
 - (milestone review) Every iTunes request in src/catalog/ (search included) goes through withItunesBudget and cached(), and maps 403/429 to CatalogError('rate'); a direct fetch bypasses the shared ~17/min budget.
@@ -41,3 +40,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) A 'wait for the first card' allowance must last until a card actually exists, not apply to a fixed index: if the first candidate yields nothing, the next lookup must be allowed to wait too, or a cool-down still reads as an outage.
 - (milestone review) A retryable failure state shown on a card ('Finding sample') needs its own retry timer with backoff and a final fallback; relying on the browser's 'online' event leaves server errors and timeouts stuck forever.
 - (milestone review) When a layout change shrinks a component (compact deck at 1280x600), recheck the text overlays other issues place inside it and retake their screenshots on the merged code.
+- (design review) Once a card is rendered as top or next, no async refill or re-score may replace it; only the pool behind the visible stack can reorder, or a key press acts on a card the user never saw.
+- (design review) Every image slot (card art, list thumb, seed pill, search result) needs one shared token-coloured fallback with a centred ~24 px glyph, covering both 'no artwork' and onError.
