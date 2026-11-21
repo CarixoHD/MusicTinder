@@ -2,9 +2,6 @@
 
 Short lessons from building this product, written by Slopper when work needed fixing. Read them before you start: they save you from mistakes earlier agents made.
 
-- (milestone review) Search UIs should drop or visibly mark the previous term's results as soon as the term changes, not only when the next response arrives.
-- (#10) In this shared sandbox, any e2e config must not assume 5173 is free: other worktrees' Playwright/dev servers use it. Derive the port from the worktree path (or honour PORT) rather than using a fixed default.
-- (#12) When a test needs a browser API jsdom lacks (matchMedia), don't stub it: add an explicit parameter backed by a real default and pin the live browser behaviour in Playwright with page.emulateMedia.
 - (milestone review) A deck status other than `dealing` needs its own copy: `stalled` (catalog failure) must render PRD's 'Couldn't reach the catalog' + retry, never the deck-end 'that's everything' screen, and an e2e test that aborts the catalog routes should pin it.
 - (milestone review) Once a swipe gesture starts committing (fly-out), the button and arrow-key paths must ignore input until the deck has promoted the next card; otherwise two inputs race for the same card.
 - (milestone review) Anything serialised behind the iTunes budget queue needs a fetch timeout, or one hung request blocks every later refill.
@@ -42,3 +39,6 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) Fakes for catalog adapters must return the fields the real API returns: an iTunes musicArtist search has no artwork, so a fake that adds one hides a dead code path. Check the live response shape (curl) before relying on a field.
 - (milestone review) Bounding a wait must not turn 'not checked because of the cool-down' into 'nothing there': if lookups were refused by the budget, the deck needs a retryable state, not the seed-blaming empty copy.
 - (milestone review) Cadence rules (1 in 6, never two in a row) need a test with a draining pool and skips, not only a stable pool where every card is liked.
+- (milestone review) When a wildcard or exploration card is built from a search hit instead of the usual lookup, apply the same normalisation (release-type suffix, store link) as the regular card builder.
+- (milestone review) Exclude catch-all values such as the 'other' chip from exploration rotations: they match on title words, not genre.
+- (milestone review) Report the app's own budget refusal as kind 'budget' everywhere (searches included), never as 'rate', so every caller can show it as a retryable cool-down.
