@@ -16,6 +16,8 @@ export interface AppState {
   settingsOpen: boolean;
   /** Set when saved data had to be repaired on load; runtime-only, never persisted. */
   storageNotice: string | null;
+  /** Bumped by resetAll() so session-held decks can never match data from before the wipe. */
+  sessionEpoch: number;
   addSeed: (seed: Seed) => void;
   removeSeed: (id: string) => void;
   setSettings: (patch: Partial<Settings>) => void;
@@ -291,6 +293,7 @@ export const useStore = create<AppState>()(
       screen: initialScreen(),
       settingsOpen: false,
       storageNotice: null,
+      sessionEpoch: 0,
 
       addSeed: (seed) => set((state) => ({ seeds: [...state.seeds, seed] })),
       removeSeed: (id) => set((state) => ({ seeds: state.seeds.filter((seed) => seed.id !== id) })),
@@ -311,7 +314,7 @@ export const useStore = create<AppState>()(
           const key = localStorage.key(i);
           if (key?.startsWith(STORAGE_KEY)) localStorage.removeItem(key);
         }
-        set({
+        set((state) => ({
           seeds: [],
           settings: defaultSettings(),
           taste: defaultTaste(),
@@ -320,7 +323,8 @@ export const useStore = create<AppState>()(
           screen: 'setup',
           settingsOpen: false,
           storageNotice: null,
-        });
+          sessionEpoch: state.sessionEpoch + 1,
+        }));
       },
     }),
     {
