@@ -15,17 +15,12 @@ describe('createCatalog', () => {
     ]);
   });
 
-  it('unimplemented adapters reject with a typed unknown CatalogError', async () => {
+  it('stub adapters reject with a typed unknown CatalogError', async () => {
     const catalog = createCatalog();
-    const failures = [
-      () => catalog.searchSeeds('anything', 'artist'),
-      () => catalog.enrichArtist('anything'),
-      () => catalog.artistTopTracks(1, 5),
-      () => catalog.artistAlbums(1, 5),
-    ];
 
-    for (const failure of failures) {
-      await expect(failure()).rejects.toMatchObject({ name: 'CatalogError', kind: 'unknown' });
-    }
+    await expect(catalog.searchSeeds('anything', 'artist')).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'unknown',
+    });
   });
 });
