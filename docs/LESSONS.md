@@ -25,3 +25,4 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) A budget cool-down (withItunesBudget resolving its empty fallback) must reach the deck as a retryable state, never as 'nothing there'. Otherwise empty-state copy blames the seeds or claims the deck has ended.
 - (milestone review) Anything that adds work to the serialised iTunes queue (seed search included) needs a fetch timeout, so one hung request cannot freeze every later request.
 - (milestone review) E2e tests should assert the settled screen, not a transient loading heading that a fast failure state can replace.
+- (milestone review) When a lower layer changes a 'no result' return into a typed error, use the error kind in the user-facing copy too: a rate cool-down should say to wait a moment, not to check the connection.
