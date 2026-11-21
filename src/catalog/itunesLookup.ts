@@ -51,6 +51,13 @@ const chipsOf = (result: ItunesResult): Chip[] =>
 /** Apple hands out 100px artwork; the card shows it at 600px. */
 const artwork600 = (url?: string): string | undefined => url?.replace(/\/\d+x\d+bb\./, '/600x600bb.');
 
+const PREVIEW_LIMIT = 5;
+
+const albumIdOf = (key: string): number | undefined => {
+  const match = /^it:album:(\d+)$/.exec(key);
+  return match ? Number(match[1]) : undefined;
+};
+
 const yearOf = (releaseDate?: string): number | undefined => {
   const year = releaseDate ? Number(releaseDate.slice(0, 4)) : Number.NaN;
   return Number.isFinite(year) ? year : undefined;
@@ -172,4 +179,33 @@ export async function artistAlbums(itunesArtistId: number, limit: number): Promi
         chips: chipsOf(result),
       }),
     );
+}
+
+/**
+ * Just-in-time sample for a card the catalog ships without one: an album's
+ * song lookup, or a song search for an artist. Fire-and-forget, so every
+ * failure (cool-down, offline, no match) is the card's existing "no sample"
+ * state rather than an error. Song cards already carry theirs.
+ */
+export async function samplePreview(card: Card): Promise<string | undefined> {
+  if (card.kind === 'song') return card.previewUrl;
+
+  try {
+    if (card.kind === 'album') {
+      const id = albumIdOf(card.key);
+      if (id === undefined) return undefined;
+      const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${PREVIEW_LIMIT}`);
+      return songs?.find((song) => song.previewUrl)?.previewUrl;
+    }
+
+    const results = await lookupResults(
+      `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${PREVIEW_LIMIT}`,
+    );
+    return results?.find(
+      (result) => result.previewUrl && nameScore(card.creator, result.artistName ?? '') > 0,
+    )?.previewUrl;
+  } catch {
+    // Network failure or an exhausted budget: the card reads "No sample".
+    return undefined;
+  }
 }
