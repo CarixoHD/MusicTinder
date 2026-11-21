@@ -25,25 +25,33 @@ describe('catalog cache', () => {
   it('serves a cached loader result without calling the loader again within 24 h', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    const load = vi.fn(async () => 'fresh');
+    let loads = 0;
+    const load = async () => {
+      loads += 1;
+      return 'fresh';
+    };
 
     expect(await cached('k', load)).toBe('fresh');
     vi.setSystemTime(new Date('2026-01-01T23:59:00Z'));
     expect(await cached('k', load)).toBe('fresh');
 
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(loads).toBe(1);
   });
 
   it('expires an entry after 24 h and refetches it', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    const load = vi.fn(async () => 'fresh');
+    let loads = 0;
+    const load = async () => {
+      loads += 1;
+      return 'fresh';
+    };
 
     await cached('k', load);
     vi.setSystemTime(new Date(Date.now() + CACHE_TTL_MS + 1));
     await cached('k', load);
 
-    expect(load).toHaveBeenCalledTimes(2);
+    expect(loads).toBe(2);
   });
 
   it('never holds more than the cap and evicts the least recently used entry', () => {

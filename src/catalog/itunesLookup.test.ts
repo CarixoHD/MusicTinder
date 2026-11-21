@@ -1,15 +1,39 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HttpResponse, http } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetItunesBudget } from './budget';
 import { artistAlbums, artistTopTracks, enrichArtist } from './itunesLookup';
 
-const jsonResponse = (body: unknown, status = 200): Response =>
-  ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+const ITUNES_SEARCH = 'https://itunes.apple.com/search';
+const ITUNES_LOOKUP = 'https://itunes.apple.com/lookup';
 
-/** Stub the network: reply(url) returns the JSON body for that request. */
-function mockFetch(reply: (url: string) => unknown) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => jsonResponse(await reply(String(input))));
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
+const server = setupServer();
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+
+beforeEach(() => {
+  localStorage.clear();
+  vi.useRealTimers();
+  resetItunesBudget();
+});
+
+afterEach(() => {
+  server.resetHandlers();
+  vi.useRealTimers();
+});
+
+afterAll(() => server.close());
+
+/** Serve every lookup and record the URLs the adapter actually requested. */
+function serveLookups(reply: (url: string) => unknown): string[] {
+  const urls: string[] = [];
+  server.use(
+    http.get(ITUNES_LOOKUP, ({ request }) => {
+      urls.push(request.url);
+      return HttpResponse.json(reply(request.url));
+    }),
+  );
+  return urls;
 }
 
 const TRACK_RESPONSE = {
@@ -89,40 +113,47 @@ const ALBUM_RESPONSE = {
   ],
 };
 
+const lookupId = (url: string): number => Number(new URL(url).searchParams.get('id') ?? 0);
+
 const trackReply = (url: string) => {
-  const id = Number(/[?&]id=(\d+)/.exec(url)?.[1] ?? 0);
-  return { ...TRACK_RESPONSE, results: TRACK_RESPONSE.results.map((result) => ({ ...result, trackId: (result.trackId ?? 0) + id * 10 })) };
+  const id = lookupId(url);
+  return {
+    ...TRACK_RESPONSE,
+    results: TRACK_RESPONSE.results.map((result) => ({ ...result, trackId: (result.trackId ?? 0) + id * 10 })),
+  };
 };
-
-beforeEach(() => {
-  localStorage.clear();
-  vi.useRealTimers();
-  resetItunesBudget();
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
-});
 
 describe('enrichArtist', () => {
   it('searches musicArtist and returns the exact match with chips from primaryGenreName', async () => {
-    const fetchMock = mockFetch(() => ({
-      resultCount: 2,
-      results: [
-        { wrapperType: 'artist', artistId: 9, artistName: 'Ada Vale Tribute', primaryGenreName: 'Pop' },
-        { wrapperType: 'artist', artistId: 42, artistName: 'Ada Vale', primaryGenreName: 'Hip-Hop/Rap' },
-      ],
-    }));
+    const urls: string[] = [];
+    server.use(
+      http.get(ITUNES_SEARCH, ({ request }) => {
+        urls.push(request.url);
+        return HttpResponse.json({
+          resultCount: 2,
+          results: [
+            { wrapperType: 'artist', artistId: 9, artistName: 'Ada Vale Tribute', primaryGenreName: 'Pop' },
+            { wrapperType: 'artist', artistId: 42, artistName: 'Ada Vale', primaryGenreName: 'Hip-Hop/Rap' },
+          ],
+        });
+      }),
+    );
 
     await expect(enrichArtist('ada vale')).resolves.toEqual({ itunesArtistId: 42, chips: ['hip-hop'] });
-    expect(fetchMock.mock.calls[0][0]).toBe(
+    expect(urls[0]).toBe(
       'https://itunes.apple.com/search?term=ada%20vale&media=music&entity=musicArtist&limit=5',
     );
   });
 
   it('returns null when no search hit carries the name', async () => {
-    mockFetch(() => ({ resultCount: 1, results: [{ wrapperType: 'artist', artistId: 7, artistName: 'Someone Else' }] }));
+    server.use(
+      http.get(ITUNES_SEARCH, () =>
+        HttpResponse.json({
+          resultCount: 1,
+          results: [{ wrapperType: 'artist', artistId: 7, artistName: 'Someone Else' }],
+        }),
+      ),
+    );
 
     await expect(enrichArtist('ada vale')).resolves.toBeNull();
   });
@@ -130,11 +161,11 @@ describe('enrichArtist', () => {
 
 describe('artistTopTracks', () => {
   it('looks up songs and maps them to Cards with 600px art, year, chips, preview and a clean Apple link', async () => {
-    const fetchMock = mockFetch(() => TRACK_RESPONSE);
+    const urls = serveLookups(() => TRACK_RESPONSE);
 
     const cards = await artistTopTracks(42, 2);
 
-    expect(fetchMock.mock.calls[0][0]).toBe('https://itunes.apple.com/lookup?id=42&entity=song&limit=2');
+    expect(urls[0]).toBe('https://itunes.apple.com/lookup?id=42&entity=song&limit=2');
     expect(cards).toEqual([
       {
         key: 'it:track:1001',
@@ -168,11 +199,11 @@ describe('artistTopTracks', () => {
 
 describe('artistAlbums', () => {
   it('looks up albums and maps collections to album Cards without inventing a preview', async () => {
-    const fetchMock = mockFetch(() => ALBUM_RESPONSE);
+    const urls = serveLookups(() => ALBUM_RESPONSE);
 
     const cards = await artistAlbums(42, 1);
 
-    expect(fetchMock.mock.calls[0][0]).toBe('https://itunes.apple.com/lookup?id=42&entity=album&limit=1');
+    expect(urls[0]).toBe('https://itunes.apple.com/lookup?id=42&entity=album&limit=1');
     expect(cards).toEqual([
       {
         key: 'it:album:501',
@@ -192,25 +223,20 @@ describe('artistAlbums', () => {
 });
 
 describe('iTunes failures', () => {
-  it('rejects with a network CatalogError when fetch fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => {
-        throw new TypeError('offline');
-      }),
-    );
+  it('rejects with a network CatalogError when the request fails', async () => {
+    server.use(http.get(ITUNES_LOOKUP, () => HttpResponse.error()));
 
     await expect(artistTopTracks(42, 2)).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
   });
 
   it('rejects with a rate CatalogError when Apple answers 429', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 429)));
+    server.use(http.get(ITUNES_SEARCH, () => new HttpResponse(null, { status: 429 })));
 
     await expect(enrichArtist('ada vale')).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
   });
 
   it('rejects with a notfound CatalogError when the lookup has no results', async () => {
-    mockFetch(() => ({ resultCount: 0, results: [] }));
+    serveLookups(() => ({ resultCount: 0, results: [] }));
 
     await expect(artistAlbums(404, 5)).rejects.toMatchObject({ name: 'CatalogError', kind: 'notfound' });
   });
@@ -221,18 +247,18 @@ describe('lookup cache', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
     resetItunesBudget();
-    const fetchMock = mockFetch(() => TRACK_RESPONSE);
+    const urls = serveLookups(() => TRACK_RESPONSE);
 
     const first = await artistTopTracks(42, 2);
     vi.setSystemTime(new Date('2027-01-01T23:00:00Z'));
     const second = await artistTopTracks(42, 2);
 
     expect(second).toEqual(first);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(urls).toHaveLength(1);
 
     vi.setSystemTime(new Date('2027-01-02T01:00:00Z'));
     await artistTopTracks(42, 2);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(urls).toHaveLength(2);
   });
 });
 
@@ -240,38 +266,38 @@ describe('iTunes budget', () => {
   it('serialises concurrent lookups, one fetch in flight at a time', async () => {
     let inFlight = 0;
     let maxInFlight = 0;
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      inFlight += 1;
-      maxInFlight = Math.max(maxInFlight, inFlight);
-      await Promise.resolve();
-      inFlight -= 1;
-      return jsonResponse(trackReply(String(input)));
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    server.use(
+      http.get(ITUNES_LOOKUP, async ({ request }) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        inFlight -= 1;
+        return HttpResponse.json(trackReply(request.url));
+      }),
+    );
 
     await Promise.all([artistTopTracks(1, 1), artistTopTracks(2, 1), artistTopTracks(3, 1)]);
 
     expect(maxInFlight).toBe(1);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('resolves empty without fetching once the budget is spent, and recovers after a minute', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
     resetItunesBudget();
-    const fetchMock = mockFetch(trackReply);
+    const urls = serveLookups(trackReply);
 
     for (let id = 1; id <= 17; id += 1) {
       await artistTopTracks(id, 1);
     }
-    expect(fetchMock).toHaveBeenCalledTimes(17);
+    expect(urls).toHaveLength(17);
 
     await expect(artistTopTracks(99, 1)).resolves.toEqual([]);
     await expect(enrichArtist('Ada Vale')).resolves.toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(17);
+    expect(urls).toHaveLength(17);
 
     vi.setSystemTime(new Date('2027-01-01T00:01:00Z'));
     await expect(artistTopTracks(99, 1)).resolves.toHaveLength(1);
-    expect(fetchMock).toHaveBeenCalledTimes(18);
+    expect(urls).toHaveLength(18);
   });
 });
