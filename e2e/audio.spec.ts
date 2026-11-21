@@ -29,6 +29,29 @@ test('tapping play starts the sample and tapping again pauses it', async ({ page
   await expect.poll(() => anyAudioPlaying(page)).toBe(false);
 });
 
+test('the sample progress draws as a 2 px ring around the play circle', async ({ page }) => {
+  await page.goto('/');
+  const current = page.locator('.deck__current');
+  await expect(deckTitle(page)).toHaveText('Glass Harbour song 1');
+
+  const ring = current.locator('.play-button__ring');
+  await expect(ring).toBeVisible();
+  // The promoted card's entry spring scales the whole card; wait for it to settle.
+  await expect
+    .poll(async () => (await ring.boundingBox())?.width ?? 0)
+    .toBeCloseTo(48, 0);
+  expect((await ring.boundingBox())!.height).toBeCloseTo(48, 0);
+
+  const progress = current.locator('.play-button__ring-progress');
+  const circumference = 2 * Math.PI * 22;
+  const offset = () =>
+    progress.evaluate((element) => Number.parseFloat(element.getAttribute('stroke-dashoffset') ?? 'NaN'));
+  expect(await offset()).toBeCloseTo(circumference, 0);
+
+  await current.getByRole('button', { name: 'Play sample' }).click();
+  await expect.poll(async () => (await offset()) < circumference / 2).toBe(true);
+});
+
 test('a like with sound on starts the next card without another tap', async ({ page }) => {
   await page.goto('/');
   const current = page.locator('.deck__current');

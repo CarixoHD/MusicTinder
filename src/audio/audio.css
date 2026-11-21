@@ -45,23 +45,33 @@
   border-color: var(--border-strong);
 }
 
-.play-button__track {
+/* 2 px progress ring on the 48 px circle's edge (the button's 1 px border is
+   the ring's outer edge), starting at twelve o'clock. Track at hairline
+   strength, progress in primary text at 0.9 so it reads over the glass. */
+.play-button__ring {
   position: absolute;
-  right: var(--space-3);
-  bottom: 7px;
-  left: var(--space-3);
-  height: 2px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--border-strong);
+  top: -1px;
+  left: -1px;
+  width: 48px;
+  height: 48px;
+  transform: rotate(-90deg);
+  pointer-events: none;
 }
 
-.play-button__progress {
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: var(--accent);
-  transform-origin: left center;
+.play-button__ring circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.play-button__ring-track {
+  stroke: var(--border-strong);
+}
+
+.play-button__ring-progress {
+  stroke: var(--text-primary);
+  stroke-opacity: 0.9;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--duration-fast) linear;
 }
 
 /* No-preview cards: a visible, non-interactive "No sample" pill. */
