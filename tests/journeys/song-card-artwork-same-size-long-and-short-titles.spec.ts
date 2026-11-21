@@ -24,7 +24,7 @@ test("song cards keep large, same-size artwork whether the title is very long or
   await page.route(/api\.deezer\.com/, async (route) => {
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
-    const data = u.pathname.includes("/search") ? { data: [{ id: ++id, name: u.searchParams.get("q") }] } : { data: Array.from({ length: 8 }, () => ({ id: ++id, name: `Kin${id}` })) };
+    const data = u.pathname.includes("/search") ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] } : { data: Array.from({ length: 8 }, () => ({ id: ++id, name: `Kin${id}` })) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });
 

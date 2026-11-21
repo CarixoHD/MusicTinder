@@ -10,19 +10,36 @@ const storedSeeds = (page: Page): Promise<unknown> =>
 const storedCardType = (page: Page): Promise<unknown> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? '{}').state?.settings?.cardType);
 
-test('typing shows matching artists and picking one stores its iTunes id', async ({ page }) => {
+test('typing shows artists from Deezer and picking one stores its Deezer seed, then fills iTunes details', async ({
+  page,
+}) => {
+  const itunesSearches: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('itunes.apple.com/search')) itunesSearches.push(request.url());
+  });
   await mockCatalog(page);
   await page.goto('/');
 
   const input = page.getByRole('searchbox', { name: 'Search artists' });
   await input.fill('ada');
+  const result = page.getByRole('button', { name: /Ada Vale/ });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText('18k fans');
+  // Typing spent no iTunes token: the deck keeps its ~17/min budget.
+  expect(itunesSearches).toEqual([]);
 
-  await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
-  await page.getByRole('button', { name: /Ada Vale/ }).click();
-
+  await result.click();
   await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
-  expect(await storedSeeds(page)).toMatchObject([
-    { kind: 'artist', name: 'Ada Vale', itunesArtistId: 9101, chips: ['electronic'] },
+
+  // The seed lands on ['other'] and gets its chips + iTunes id off the pick path.
+  await expect.poll(() => storedSeeds(page)).toMatchObject([
+    {
+      kind: 'artist',
+      name: 'Ada Vale',
+      deezerArtistId: 4101,
+      itunesArtistId: 9101,
+      chips: ['electronic'],
+    },
   ]);
 });
 
@@ -44,20 +61,23 @@ test('the album picker stores an album seed with its collection id', async ({ pa
 test('an in-flight response for an older term never renders under the latest term', async ({
   page,
 }) => {
-  // Searches share the serialised iTunes budget, so "ada" answers first and
-  // "north" answers seconds later: the stale "ada" answer must not render.
+  // Deezer searches are independent, so "ada" answers after 800 ms and "north"
+  // seconds later: the stale "ada" answer must not render.
   await mockCatalog(page, {
-    search: (params) => (params.get('term') === 'ada' ? { delayMs: 800 } : { delayMs: 6_000 }),
+    deezerSearch: (params) =>
+      params.get('q') === 'ada' ? { delayMs: 800 } : { delayMs: 6_000 },
   });
   await page.goto('/');
 
   const input = page.getByRole('searchbox', { name: 'Search artists' });
   await input.fill('ada');
   await page.waitForRequest(
-    (request) => request.url().includes('itunes.apple.com/search') && request.url().includes('term=ada'),
+    (request) =>
+      request.url().includes('api.deezer.com/search/artist') && request.url().includes('q=ada'),
   );
   const slowAda = page.waitForResponse(
-    (response) => response.url().includes('itunes.apple.com/search') && response.url().includes('term=ada'),
+    (response) =>
+      response.url().includes('api.deezer.com/search/artist') && response.url().includes('q=ada'),
   );
 
   await input.fill('north');
@@ -77,7 +97,9 @@ test('a term with no hits shows an inline no-match row', async ({ page }) => {
 });
 
 test('a failed search explains itself inline and Retry runs it again', async ({ page }) => {
+  // Deezer first, then the iTunes fallback: both must fail for the error row.
   await mockCatalog(page, {
+    deezerSearch: () => ({ fail: true }),
     search: (_params, call) => (call === 1 ? { fail: true } : undefined),
   });
   await page.goto('/');
@@ -109,10 +131,8 @@ test('a rate-limited album search says Apple is limiting searches, and Retry run
   await expect(page.getByText('Apple is limiting searches right now')).toBeHidden();
 });
 
-test('an artist search Apple refuses falls back to Deezer and stores a Deezer seed', async ({
-  page,
-}) => {
-  await mockCatalog(page, { search: () => ({ status: 429 }) });
+test('an artist search is answered by Deezer and stores a Deezer seed', async ({ page }) => {
+  await mockCatalog(page);
   await page.goto('/');
 
   await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
@@ -125,6 +145,24 @@ test('an artist search Apple refuses falls back to Deezer and stores a Deezer se
   await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
   expect(await storedSeeds(page)).toMatchObject([
     { id: 'dz:artist:4101', kind: 'artist', name: 'Ada Vale', deezerArtistId: 4101 },
+  ]);
+});
+
+test('when Deezer errors the artist search falls back to iTunes and still shows results', async ({
+  page,
+}) => {
+  await mockCatalog(page, { deezerSearch: () => ({ fail: true }) });
+  await page.goto('/');
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+
+  const result = page.getByRole('button', { name: /Ada Vale/ });
+  await expect(result).toBeVisible();
+  await expect(result).toContainText('Electronic');
+  await result.click();
+
+  expect(await storedSeeds(page)).toMatchObject([
+    { kind: 'artist', name: 'Ada Vale', itunesArtistId: 9101 },
   ]);
 });
 

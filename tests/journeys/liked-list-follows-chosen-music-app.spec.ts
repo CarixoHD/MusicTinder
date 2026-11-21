@@ -25,7 +25,7 @@ test("empty Liked points to Discover; likes list there, open in the chosen music
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 6 }, () => ({ id: ++id, name: `Kin${id}` })) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

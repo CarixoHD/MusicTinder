@@ -34,7 +34,7 @@ test("with sound on, each artist card on a fresh deck ends up playing its sample
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 25 }, () => { const d = ++id; return { id: d, name: `Kin${d}` }; }) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

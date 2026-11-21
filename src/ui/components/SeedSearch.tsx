@@ -69,6 +69,7 @@ interface SeedSearchProps {
 export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) {
   const seeds = useStore((state) => state.seeds);
   const addSeed = useStore((state) => state.addSeed);
+  const updateSeed = useStore((state) => state.updateSeed);
   const [query, setQuery] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [search, setSearch] = useState<SearchState>({ status: 'idle' });
@@ -119,8 +120,23 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
         ? search
         : { status: 'loading' };
 
-  const pick = (seed: Seed) => {
-    if (!seeds.some((existing) => existing.id === seed.id)) addSeed(seed);
+  // Deezer hits carry no genres, so the seed starts on ['other'] and the iTunes
+  // lookup fills them in off the typing path. A cool-down or outage just leaves
+  // ['other']; the pick itself never waits.
+  const enrich = (seed: Seed) => {
+    catalog.enrichArtist(seed.name).then(
+      (result) => {
+        if (result !== null) updateSeed(seed.id, result);
+      },
+      () => undefined,
+    );
+  };
+
+  const pick = (candidate: SeedCandidate, seed: Seed) => {
+    if (!seeds.some((existing) => existing.id === seed.id)) {
+      addSeed(seed);
+      if (candidate.deezerArtistId !== undefined) enrich(seed);
+    }
     setQuery('');
   };
 
@@ -163,7 +179,7 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
                   type="button"
                   className="seed-result"
                   disabled={added}
-                  onClick={() => pick(seed)}
+                  onClick={() => pick(candidate, seed)}
                 >
                   <span className="seed-result__thumb">
                     {candidate.image ? (

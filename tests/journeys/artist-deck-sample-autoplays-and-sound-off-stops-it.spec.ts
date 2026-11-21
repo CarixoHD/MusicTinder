@@ -36,7 +36,7 @@ test("on an Artists deck the first tap plays a sample, the next card auto-plays,
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: ++id, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: ++id, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 8 }, () => ({ id: ++id, name: `Kin${id}`, picture_big: "https://e-cdns-images.dzcdn.net/x.jpg" })) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });

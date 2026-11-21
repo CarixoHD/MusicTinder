@@ -253,6 +253,11 @@ export interface MockCatalogOptions {
     params: URLSearchParams,
     call: number,
   ) => { delayMs?: number; fail?: boolean; status?: number } | void;
+  /** Adjust one Deezer artist search: delay it, fail it, or answer with no hits. */
+  deezerSearch?: (
+    params: URLSearchParams,
+    call: number,
+  ) => { delayMs?: number; fail?: boolean; empty?: boolean } | void;
   /** Also answer iTunes enrichment/album lookups for the anchors' related artists. */
   enrichRelatedArtists?: boolean;
   /** Serve the song fixtures' preview host so card samples can really play. */
@@ -265,6 +270,7 @@ export interface MockCatalogOptions {
  */
 export async function mockCatalog(page: Page, options: MockCatalogOptions = {}): Promise<void> {
   let searchCalls = 0;
+  let deezerSearchCalls = 0;
 
   await page.route('https://itunes.apple.com/**', async (route) => {
     const url = new URL(route.request().url());
@@ -296,8 +302,16 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
   await page.route('https://api.deezer.com/**', async (route) => {
     const url = new URL(route.request().url());
     let payload: unknown;
-    if (url.pathname === '/search/artist') payload = deezerSearch(url.searchParams);
-    else {
+    if (url.pathname === '/search/artist') {
+      deezerSearchCalls += 1;
+      const outcome = options.deezerSearch?.(url.searchParams, deezerSearchCalls);
+      if (outcome?.delayMs) await new Promise((resolve) => setTimeout(resolve, outcome.delayMs));
+      if (outcome?.fail) {
+        await route.abort('failed');
+        return;
+      }
+      payload = outcome?.empty ? { data: [] } : deezerSearch(url.searchParams);
+    } else {
       const related = /^\/artist\/(\d+)\/related$/.exec(url.pathname);
       if (related) payload = deezerRelated(Number(related[1]));
     }

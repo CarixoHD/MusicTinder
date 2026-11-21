@@ -28,7 +28,7 @@ test("after Reset all my data, picking the same artist again deals a fresh deck 
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const data = u.pathname.includes("/search")
-      ? { data: [{ id: stamp, name: u.searchParams.get("q") }] }
+      ? { data: [{ id: stamp, name: `${u.searchParams.get("q")} Band` }] }
       : { data: Array.from({ length: 6 }, (_, i) => ({ id: stamp * 10 + i, name: `Kin${stamp * 10 + i}` })) };
     await route.fulfill({ status: 200, contentType: "application/javascript", body: `${cb}(${JSON.stringify(data)})` });
   });
