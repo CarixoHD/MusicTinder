@@ -1,4 +1,5 @@
-import { applyFeedback, rank, score } from '../taste/taste';
+import { applyFeedback, score } from '../taste/taste';
+import { DIVERSITY_HISTORY, diversify } from '../taste/diversity';
 import { CatalogError } from '../types';
 import type {
   Card,
@@ -88,6 +89,9 @@ export function createDeck(init: DeckInit): Deck {
     swipes: 0,
   };
   let pending: Promise<DeckState> | null = null;
+  // The last cards dealt, oldest first: the diversity windows carry across
+  // commits, so the interleaving keeps its promise as the pool shrinks.
+  const recent: Card[] = [];
   // Artists liked this deck, most recent first: second-hop anchors for the next
   // refill. `generateCandidates` caps how many of them it expands.
   const likedAnchors: LikedAnchor[] = [];
@@ -97,15 +101,20 @@ export function createDeck(init: DeckInit): Deck {
     likedAnchors.unshift({ name: card.creator, creatorKey: card.creatorKey });
   };
 
-  // Unseen, above the quality floor (story 10), best first, each carrying the
-  // `because you like X` its current score supports.
-  const ranked = (taste: TasteWeights, cards: Card[]): Card[] => {
+  // Unseen, above the quality floor (story 10), relevance-ordered per branch,
+  // then interleaved so one seed branch cannot take every slot (ADR 7). Each
+  // card carries the `because you like X` its current score supports. `visible`
+  // leading cards are already on screen and keep their place: only the pool
+  // behind them re-ranks, so a refill never swaps the card under a swipe.
+  const ranked = (taste: TasteWeights, cards: Card[], visible = 0): Card[] => {
     const unique = new Map<string, Card>();
     for (const card of cards) {
       if (!seen.has(card.key) && !unique.has(card.key)) unique.set(card.key, card);
     }
     const passing = [...unique.values()].filter((card) => score(taste, card).score >= 0);
-    return rank(taste, passing).map((card) => {
+    const shown = passing.slice(0, visible);
+    const rest = diversify(taste, passing.slice(shown.length), [...recent, ...shown]);
+    return [...shown, ...rest].map((card) => {
       const because = score(taste, card).because;
       return because ? { ...card, because } : card;
     });
@@ -121,7 +130,10 @@ export function createDeck(init: DeckInit): Deck {
           // cool-down instead of reporting the catalog as unreachable.
           waitForFirstCard: state.pool.length === 0,
         });
-        const pool = ranked(state.taste, [...state.pool, ...generated]);
+        // The current card and the prefetched stack are already rendered; a
+        // refill may only reorder what comes after them.
+        const visible = Math.min(state.pool.length, 1 + PREFETCH_AHEAD);
+        const pool = ranked(state.taste, [...state.pool, ...generated], visible);
         state = {
           ...state,
           pool,
@@ -156,6 +168,8 @@ export function createDeck(init: DeckInit): Deck {
 
     const { taste } = applyFeedback(state.taste, reaction);
     seen.add(current.key);
+    recent.push(current);
+    if (recent.length > DIVERSITY_HISTORY) recent.shift();
     init.sink?.setTaste(taste);
     init.sink?.markSeen(current.key);
     if (reaction.reaction === 'like') {
