@@ -1,4 +1,4 @@
-import type { Card, LikedItem, Settings } from '../types';
+import type { Card, Settings } from '../types';
 
 /** The music app a liked item opens in (a subset of Settings). */
 export type MusicApp = Settings['musicApp'];
