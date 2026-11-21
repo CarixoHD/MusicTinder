@@ -12,6 +12,8 @@ const FAST_SKIP_FACTOR = 0.5;
 // Popularity dampener: mild per-decade penalty so an equally fitting lesser-known
 // artist outranks a famous one. Capped below one like (BETA), so taste fit still
 // dominates a fan-count gap. Cards without a fan count are not dampened at all.
+// It only orders (rank); it never feeds score(), which the deck filters as its
+// quality floor — otherwise a popular card would be dropped, not just pushed down.
 const POPULARITY_PER_DECADE = 0.05;
 const MAX_POPULARITY_PENALTY = BETA * 0.9;
 
@@ -122,7 +124,8 @@ export function applyInverse(taste: TasteWeights, delta: TasteDelta): TasteWeigh
 /**
  * Dot product over the card's chips, its creator, and its anchor creators
  * (shared-artist similarity, weighted by ALPHA). `because` names the origin of
- * the strongest positive contributor.
+ * the strongest positive contributor. This is the undampened taste fit: callers
+ * may use it as a threshold, so popularity must never pull it down.
  */
 export function score(taste: TasteWeights, card: Card): { score: number; because?: string } {
   const contributors: { feature: string; weight: number }[] = [
@@ -143,14 +146,13 @@ export function score(taste: TasteWeights, card: Card): { score: number; because
       undefined,
     );
 
-  const adjusted = total - popularityPenalty(card.fans);
-  return strongest ? { score: adjusted, because: taste.origins[strongest.feature] } : { score: adjusted };
+  return strongest ? { score: total, because: taste.origins[strongest.feature] } : { score: total };
 }
 
-/** Score desc, stable: equal scores keep their incoming order. */
+/** Score desc after the popularity dampener, stable: equal scores keep their incoming order. */
 export function rank(taste: TasteWeights, cards: Card[]): Card[] {
   return cards
-    .map((card, index) => ({ card, index, score: score(taste, card).score }))
+    .map((card, index) => ({ card, index, score: score(taste, card).score - popularityPenalty(card.fans) }))
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.card);
 }

@@ -200,6 +200,23 @@ describe('deck refill', () => {
     expect(state.emptyReason).toBe('filtered');
   });
 
+  it('deals a popular related card whose only fit is its anchor, instead of dropping it on the dampener', async () => {
+    // No chip fits the seed, so only ALPHA × BETA from the anchor contributes.
+    // Its fan count used to push the score below the deck's quality floor.
+    const popular: Card = { ...artistCard(7, 'jazz'), fans: 3_000_000 };
+    const deck = createDeck({
+      catalog: new FixedCatalog([popular]),
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+
+    const state = await deck.refill();
+
+    expect(state.status).toBe('dealing');
+    expect(state.pool.map((card) => card.key)).toEqual([popular.key]);
+  });
+
   it('reports no candidates when the catalog answers with nothing for these seeds', async () => {
     const deck = createDeck({
       catalog: new FixedCatalog([]),
