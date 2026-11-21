@@ -108,6 +108,20 @@ describe('createCatalog', () => {
     expect(itunesSearches).toEqual([]);
   });
 
+  it('keeps generation’s genre-anchor search on iTunes, never Deezer', async () => {
+    // Generation calls searchSeeds without options to turn a genre like 'Pop'
+    // into anchor artists; Deezer matches artist names only and would anchor
+    // on obscure acts whose name contains the genre.
+    const { srcs } = serveScripts(() => ({ data: [{ id: 1, name: 'POP', nb_fan: 10 }] }));
+
+    const candidates = await createCatalog().searchSeeds('Pop', 'artist');
+
+    expect(candidates).toMatchObject([{ itunesId: 9101, name: 'Ada Vale' }]);
+    expect(srcs).toEqual([]);
+    expect(itunesSearches).toHaveLength(1);
+    expect(itunesSearches[0]).toContain('term=Pop');
+  });
+
   it('falls back to iTunes when Deezer errors', async () => {
     serveScripts(() => ({ error: { type: 'DataException', message: 'quota', code: 4 } }));
 
