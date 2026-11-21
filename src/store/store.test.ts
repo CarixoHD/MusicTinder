@@ -41,7 +41,7 @@ function readPersisted(): { state: Record<string, unknown> } {
 }
 
 const DEFAULTS = {
-  settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+  settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist', wildcards: true },
   taste: { chips: {}, creators: {}, origins: {} },
 };
 
@@ -54,7 +54,7 @@ describe('store persistence', () => {
   it('round-trips seeds, settings, taste, liked and seen across a reload', async () => {
     const store = await reloadStore();
     store.getState().addSeed(SEED);
-    store.getState().setSettings({ musicApp: 'apple', sound: false, theme: 'dark' });
+    store.getState().setSettings({ musicApp: 'apple', sound: false, theme: 'dark', wildcards: false });
     store.getState().setTaste({
       chips: { electronic: 1.5 },
       creators: { 'ada vale': 1 },
@@ -74,6 +74,7 @@ describe('store persistence', () => {
       sound: false,
       theme: 'dark',
       cardType: 'artist',
+      wildcards: false,
     });
     expect(state.taste).toEqual({
       chips: { electronic: 1.5 },
@@ -125,6 +126,29 @@ describe('store persistence', () => {
     const store = await reloadStore();
 
     expect(store.getState().settings).toEqual({ ...DEFAULTS.settings, musicApp: 'apple' });
+  });
+
+  it('loads old settings without wildcards, and a non-boolean value, as wildcards on', async () => {
+    writePersisted({ settings: { musicApp: 'apple', sound: false, theme: 'dark', cardType: 'song' } });
+
+    let store = await reloadStore();
+    expect(store.getState().settings.wildcards).toBe(true);
+    expect(store.getState().storageNotice).toBeNull();
+
+    writePersisted({ settings: { wildcards: 'off' } });
+    store = await reloadStore();
+    expect(store.getState().settings.wildcards).toBe(true);
+  });
+
+  it('persists the wildcards toggle across a reload', async () => {
+    const store = await reloadStore();
+    expect(store.getState().settings.wildcards).toBe(true);
+
+    store.getState().setSettings({ wildcards: false });
+
+    const reloaded = await reloadStore();
+    expect(reloaded.getState().settings.wildcards).toBe(false);
+    expect(readPersisted().state.settings).toMatchObject({ wildcards: false });
   });
 
   it('falls back per settings field when a saved value is unknown', async () => {
@@ -194,6 +218,7 @@ describe('store persistence', () => {
       sound: true,
       theme: 'system',
       cardType: 'artist',
+      wildcards: true,
     });
     expect(state.taste).toEqual({ chips: {}, creators: {}, origins: {} });
     expect(state.liked).toEqual([]);

@@ -144,7 +144,7 @@ async function renderDeck(cardType: CardKind, catalog: FakeCatalog = new FakeCat
         chips: ['electronic', 'ambient'],
       },
     ],
-    settings: { ...SOUND_ON, cardType },
+    settings: { ...SOUND_ON, cardType, wildcards: true },
     taste: { chips: {}, creators: {}, origins: {} },
     liked: [],
     seen: [],

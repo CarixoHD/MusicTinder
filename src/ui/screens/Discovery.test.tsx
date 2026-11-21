@@ -65,7 +65,13 @@ beforeEach(() => {
   catalog = new FakeCatalog();
   useStore.setState({
     seeds: [{ ...SEED, chips: [...SEED.chips] }],
-    settings: { musicApp: 'spotify', sound: false, theme: 'system', cardType: 'artist' },
+    settings: {
+      musicApp: 'spotify',
+      sound: false,
+      theme: 'system',
+      cardType: 'artist',
+      wildcards: true,
+    },
     taste: { chips: {}, creators: {}, origins: {} },
     liked: [],
     seen: [],
