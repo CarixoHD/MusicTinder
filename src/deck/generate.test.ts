@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FakeCatalog } from '../testkit/fakeCatalog';
 import { CatalogError, type Card, type Catalog, type Chip, type Seed } from '../types';
-import { generateCandidates } from './generate';
+import { generateCandidates, LIKED_ANCHOR_LIMIT } from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
   {
@@ -184,6 +184,45 @@ class DuplicateProfileCatalog extends FakeCatalog {
   }
 }
 
+/** A seed saved in an older session carries the empty duplicate's id. */
+const DEAD_PROFILE_ID = 459_101;
+
+/** Ada Vale's name resolves to the real profile (the dead duplicate listed as an alternative). */
+class DeadStoredIdCatalog extends FakeCatalog {
+  readonly resolved: string[] = [];
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    this.resolved.push(name.trim().toLowerCase());
+    const real = await super.resolveDeezerArtist(name);
+    return real
+      ? { id: real.id, name: real.name, alternatives: [{ id: DEAD_PROFILE_ID, name: real.name }] }
+      : null;
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    return deezerArtistId === DEAD_PROFILE_ID ? [] : super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+const DEAD_SEEDS: Seed[] = [{ ...ARTIST_SEEDS[0], deezerArtistId: DEAD_PROFILE_ID }];
+
+/** Deezer answers the dead profile with an unrecognised error rather than an empty list. */
+class UnknownErrorStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    if (deezerArtistId === DEAD_PROFILE_ID) throw new CatalogError('unknown', 'deezer hiccup');
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** The catalog is down: the stored id fails with an outage, not an empty profile. */
+class OutageStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(): Promise<Card[]> {
+    throw new CatalogError('network', 'offline');
+  }
+}
+
 /** The catalog answers "nothing there" for every anchor. */
 class NotFoundCatalog extends FakeCatalog {
   override async relatedArtists(): Promise<Card[]> {
@@ -220,6 +259,98 @@ class UnknownArtistCatalog extends UnenrichedCatalog {
     return name.trim().toLowerCase() === 'glass harbour' ? null : super.enrichArtist(name);
   }
 }
+
+const FAR_SHORE: Card = {
+  key: 'dz:artist:6002',
+  kind: 'artist',
+  source: 'deezer',
+  title: 'Far Shore',
+  creator: 'Far Shore',
+  creatorKey: 'far shore',
+  image: 'https://cdn.example.test/artists/6002.jpg',
+  chips: ['dance'],
+};
+
+/**
+ * Glass Harbour is only reachable through Ada Vale, and its own profile opens
+ * Far Shore: a second hop a seed-only refill can never reach.
+ */
+class SecondHopCatalog extends FakeCatalog {
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    return name.trim().toLowerCase() === 'glass harbour' ? { id: 5101, name } : super.resolveDeezerArtist(name);
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    if (deezerArtistId === 5101) return [FAR_SHORE];
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+
+  override async enrichArtist(name: string) {
+    return name.trim().toLowerCase() === FAR_SHORE.creatorKey
+      ? { itunesArtistId: 6002, chips: FAR_SHORE.chips }
+      : super.enrichArtist(name);
+  }
+}
+
+/** Resolves any artist name to a fresh profile, and records the expansion. */
+class LikedAnchorCatalog extends FakeCatalog {
+  readonly resolved: string[] = [];
+  readonly relatedCalls: number[] = [];
+
+  override async resolveDeezerArtist(name: string) {
+    const found = await super.resolveDeezerArtist(name);
+    if (found) return found;
+    this.resolved.push(name.trim().toLowerCase());
+    return { id: 9000 + this.resolved.length, name };
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    this.relatedCalls.push(deezerArtistId);
+    return deezerArtistId > 9000 ? [] : super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+const rosterCard = (name: string, deezerId: number): Card => ({
+  key: `dz:artist:${deezerId}`,
+  kind: 'artist',
+  source: 'deezer',
+  title: name,
+  creator: name,
+  creatorKey: name.toLowerCase(),
+  image: `https://cdn.example.test/artists/${deezerId}.jpg`,
+  chips: ['rock'],
+});
+
+/** Two anchors with several related artists each; records the enrichment order. */
+class RotationCatalog extends FakeCatalog {
+  readonly enriched: string[] = [];
+
+  constructor(
+    private readonly graph: Record<number, Card[]>,
+    private readonly budget = Number.POSITIVE_INFINITY,
+  ) {
+    super();
+  }
+
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return (this.graph[deezerArtistId] ?? []).slice(0, limit);
+  }
+
+  override async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    this.enriched.push(name.trim().toLowerCase());
+    // The shared iTunes budget: past it, lookups resolve empty like a cool-down.
+    if (this.enriched.length > this.budget) return null;
+    return { itunesArtistId: 10_000 + this.enriched.length, chips: ['rock'] };
+  }
+}
+
+const ROTATION: Record<number, Card[]> = {
+  4101: [rosterCard('A One', 7101), rosterCard('A Two', 7102), rosterCard('A Three', 7103)],
+  4102: [rosterCard('B One', 7201), rosterCard('B Two', 7202), rosterCard('B Three', 7203)],
+};
 
 describe('generateCandidates', () => {
   it('returns only artist cards, none seen and none a seed artist', async () => {
@@ -333,6 +464,53 @@ describe('generateCandidates', () => {
     expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
   });
 
+  it('resolves a seed’s dead stored deezer id by name instead of dealing nothing', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual(['ada vale']);
+    expect(cards.length).toBeGreaterThan(0);
+    expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('resolves by name when the stored id answers with an unknown error', async () => {
+    const catalog = new UnknownErrorStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual(['ada vale']);
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
+  it('does not spend a name lookup on a stored id when the catalog is simply down', async () => {
+    const catalog = new OutageStoredIdCatalog();
+
+    await expect(generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set())).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'network',
+    });
+
+    expect(catalog.resolved).toEqual([]);
+  });
+
+  it('never retries a dead deezer id within the same generation run', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.relatedCalls.filter((id) => id === DEAD_PROFILE_ID)).toHaveLength(1);
+  });
+
+  it('makes no name lookup for a stored deezer id that has related artists', async () => {
+    const catalog = new DeadStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual([]);
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
   it('deals candidates when every seed resolves to the duplicate-profile shape', async () => {
     const cards = await generateCandidates(new DuplicateProfileCatalog(), UNRESOLVED_SEEDS, 'artist', new Set());
 
@@ -377,5 +555,53 @@ describe('generateCandidates', () => {
     const cards = await generateCandidates(new NotFoundCatalog(), ARTIST_SEEDS, 'artist', new Set());
 
     expect(cards).toEqual([]);
+  });
+
+  it('expands a liked artist as a second-hop anchor, never dealing it or a seed', async () => {
+    const catalog = new SecondHopCatalog();
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+      likedAnchors: [{ name: 'Glass Harbour', creatorKey: 'glass harbour' }],
+    });
+
+    expect(catalog.relatedCalls).toContain(5101);
+    const secondHop = cards.filter((card) => card.creatorKey === 'far shore');
+    expect(secondHop).toHaveLength(1);
+    expect(secondHop[0].related).toEqual(['glass harbour']);
+    expect(
+      cards.some((card) => card.creatorKey === 'glass harbour' || SEED_ARTIST_KEYS.has(card.creatorKey)),
+    ).toBe(false);
+  });
+
+  it('expands at most LIKED_ANCHOR_LIMIT liked anchors per refill', async () => {
+    const catalog = new LikedAnchorCatalog();
+    const likedAnchors = Array.from({ length: LIKED_ANCHOR_LIMIT + 1 }, (_, index) => ({
+      name: `Liked ${index}`,
+      creatorKey: `liked ${index}`,
+    }));
+
+    await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), { likedAnchors });
+
+    expect(LIKED_ANCHOR_LIMIT).toBeLessThan(likedAnchors.length);
+    expect(catalog.resolved).toHaveLength(LIKED_ANCHOR_LIMIT);
+  });
+
+  it('spends the enrichment budget round-robin across anchors, not anchor by anchor', async () => {
+    const catalog = new RotationCatalog(ROTATION, 4);
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set());
+
+    expect(catalog.enriched.slice(0, 4)).toEqual(['a one', 'b one', 'a two', 'b two']);
+    expect(cards.map((card) => card.creatorKey)).toEqual(['a one', 'b one', 'a two', 'b two']);
+  });
+
+  it('does not enrich a candidate the pool already holds', async () => {
+    const catalog = new RotationCatalog(ROTATION, 6);
+
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+      poolCreatorKeys: new Set(['a one']),
+    });
+
+    expect(catalog.enriched).not.toContain('a one');
+    expect(cards.some((card) => card.creatorKey === 'a one')).toBe(false);
   });
 });
