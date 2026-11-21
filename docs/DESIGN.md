@@ -78,10 +78,15 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   dragged card (`0 8px 32px rgba(0,0,0,.35)` dark / `.12` light).
 - Single column, centered, `max-width: 480px`. `100svh` viewport, `viewport-fit=cover`,
   safe-area insets on bottom nav and top header.
-- Deck height cap: the card column is `min(100%, max(200px, calc(100svh - 540px)))`
+- Deck height cap: the card column is `min(100%, max(220px, calc(100svh - 392px)))`
   (stack and loading skeleton). The viewport-height budget wins over the width
   floor and covers a two-line title, so like/skip never sit under the fixed tab
-  bar; 200 px is the floor that fits at 1280 × 600 with a two-line 34 px title.
+  bar. At viewport heights ≤ 840 px a compact density budgets
+  `calc(100svh - 342px)`: 8 px main top padding, 4 px deck gap, 4 px stack
+  margin, and a card with 10 px sides, 8 px top and bottom and 4 px row gaps.
+  That keeps the card large (≈378 px at 1280 × 720) while a two-line title still
+  leaves the buttons visible; above 840 px the full-width card has room for the
+  untrimmed card.
 - One screen visible at a time; two-tab bottom bar (Discover, Liked) in `--bg-glass`.
   Settings is a sheet reachable from the header only. Content never sits under chrome:
   pad with the nav's height. Setup belongs to the Discover tab: while the user

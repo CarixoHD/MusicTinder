@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockCatalog } from './fixtures';
 
-// Short viewports (a laptop window at 600 px tall, a small phone) are where the
-// fixed tab bar used to swallow the like/skip buttons once a two-line title was
-// on top. The deck's height cap has to win over any width floor.
+// Short viewports (a laptop window at 600/720 px tall, a small phone) are where
+// the fixed tab bar used to swallow the like/skip buttons once a two-line title
+// was on top. The deck's height cap has to win over any width floor.
 
 const SEED = {
   id: 'seed-ada',
@@ -15,11 +15,11 @@ const SEED = {
   chips: ['electronic', 'ambient'],
 };
 
-async function seedDeck(page: Page): Promise<void> {
+async function seedDeck(page: Page, cardType: 'artist' | 'album'): Promise<void> {
   const persisted = {
     state: {
       seeds: [SEED],
-      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType },
       taste: { chips: {}, creators: {}, origins: {} },
       liked: [],
       seen: [],
@@ -33,6 +33,36 @@ async function seedDeck(page: Page): Promise<void> {
       // about:blank has no storage; the app navigation runs this again.
     }
   }, JSON.stringify(persisted));
+}
+
+/** Albums whose titles are long enough to wrap, whatever the card width. */
+async function dealLongAlbumTitles(page: Page): Promise<void> {
+  await page.route('https://itunes.apple.com/lookup**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('entity') !== 'album') {
+      await route.fallback();
+      return;
+    }
+    const artistId = Number(url.searchParams.get('id'));
+    await route.fulfill({
+      json: {
+        resultCount: 1,
+        results: [
+          {
+            wrapperType: 'collection',
+            collectionType: 'Album',
+            collectionId: artistId * 10 + 1,
+            collectionName: `An Extraordinarily Long Album Title Number ${artistId} - Single`,
+            artistId,
+            artistName: 'The BossHoss',
+            primaryGenreName: 'Country',
+            releaseDate: '2024-04-05T00:00:00Z',
+            collectionViewUrl: `https://music.apple.com/album/${artistId * 10 + 1}`,
+          },
+        ],
+      },
+    });
+  });
 }
 
 const title = (page: Page) => page.locator('.deck__current .card__title');
@@ -57,12 +87,13 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await seedDeck(page);
+    await dealLongAlbumTitles(page);
+    await seedDeck(page, 'album');
     await page.goto('/');
     await expect(title(page)).toHaveText(/\S/);
 
-    // Deal forward until a title actually wraps; one-line titles are not the
-    // case that used to break (the 480 px budget assumed one line).
+    // The release suffix is stripped; the long title itself wraps. Deal on
+    // until a wrapped title is on top, since that is the case that broke.
     let twoLine = false;
     for (let card = 0; card < 8 && !twoLine; card += 1) {
       const { height, line } = await titleLines(page);
@@ -79,3 +110,26 @@ for (const viewport of [
     expect(like.y + like.height).toBeLessThanOrEqual(nav.y);
   });
 }
+
+// The reviewer's phone case: a short name ("The BossHoss") that wraps at 34 px.
+test('a short two-line title on a phone keeps Like above the tab bar', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 640 });
+  await seedDeck(page, 'artist');
+  await page.goto('/');
+  await expect(title(page)).toHaveText(/\S/);
+
+  let twoLine = false;
+  for (let card = 0; card < 8 && !twoLine; card += 1) {
+    const { height, line } = await titleLines(page);
+    twoLine = height > line * 1.5;
+    if (twoLine) break;
+    const current = await title(page).innerText();
+    await page.getByRole('button', { name: 'Skip', exact: true }).click();
+    await expect(title(page)).not.toHaveText(current);
+  }
+  expect(twoLine, 'expected a two-line artist name within the first 8 cards').toBe(true);
+
+  const like = (await page.getByRole('button', { name: 'Like', exact: true }).boundingBox())!;
+  const nav = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+  expect(like.y + like.height).toBeLessThanOrEqual(nav.y);
+});
