@@ -21,8 +21,11 @@ function resolveTheme(theme: Theme, prefersDark: boolean): ResolvedTheme {
  * dark/light. In system mode the two metas keep their prefers-color-scheme
  * pair; an override paints both so whichever one the browser matches is right.
  */
-export function applyTheme(theme: Theme): ResolvedTheme {
-  const resolved = resolveTheme(theme, window.matchMedia(DARK_QUERY).matches);
+export function applyTheme(
+  theme: Theme,
+  systemPrefersDark: boolean = window.matchMedia(DARK_QUERY).matches,
+): ResolvedTheme {
+  const resolved = resolveTheme(theme, systemPrefersDark);
   document.documentElement.dataset.theme = resolved;
 
   for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
@@ -42,7 +45,7 @@ export function watchTheme(theme: Theme): () => void {
   if (theme !== 'system') return () => undefined;
 
   const query = window.matchMedia(DARK_QUERY);
-  const onChange = () => applyTheme('system');
+  const onChange = () => applyTheme('system', query.matches);
   query.addEventListener('change', onChange);
   return () => query.removeEventListener('change', onChange);
 }

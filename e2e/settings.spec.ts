@@ -78,6 +78,20 @@ test('choosing Light repaints the canvas and theme-color, and survives reload', 
   expect((stored?.settings as { theme?: string } | undefined)?.theme).toBe('light');
 });
 
+test('the system theme follows the OS setting live', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  // Real matchMedia in Chromium: emulateMedia changes the OS preference.
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  expect(await canvasColor(page)).toBe('rgb(250, 250, 248)');
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  expect(await canvasColor(page)).toBe('rgb(8, 9, 10)');
+});
+
 test('music app and sound choices persist and show in the reopened settings', async ({ page }) => {
   await page.goto('/');
   let dialog = await openSettings(page);
