@@ -4,7 +4,7 @@ import { createCatalog } from '../../catalog';
 import { createDeck, type DeckState } from '../../deck/deck';
 import { useStore } from '../../store/store';
 import { initTaste } from '../../taste/taste';
-import type { TasteWeights } from '../../types';
+import type { Card as CardModel, Catalog, TasteWeights } from '../../types';
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { DeckNotice } from '../components/DeckNotice';
@@ -52,7 +52,7 @@ function SkipIcon() {
   );
 }
 
-export default function Discovery() {
+export default function Discovery({ catalog: injected }: { catalog?: Catalog } = {}) {
   const seeds = useStore((state) => state.seeds);
   const taste = useStore((state) => state.taste);
   const seen = useStore((state) => state.seen);
@@ -66,9 +66,10 @@ export default function Discovery() {
 
   // The deck is runtime state: one per visit, built from the store snapshot on
   // entry. Leaving Discovery (fresh seeds, or Setup) builds a new one.
+  const [catalog] = useState(() => injected ?? createCatalog());
   const [deck] = useState(() =>
     createDeck({
-      catalog: createCatalog(),
+      catalog,
       seeds,
       cardType,
       taste: tasteIsEmpty(taste) && seeds.length > 0 ? initTaste(seeds) : taste,
@@ -78,8 +79,19 @@ export default function Discovery() {
   );
   const [state, setState] = useState<DeckState>(deck.state);
   const [loading, setLoading] = useState(true);
+  // Previews resolved for cards the catalog ships silent, keyed by card key.
+  const [samples, setSamples] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const requested = useRef(new Set<string>());
+  const mounted = useRef(true);
   const cardStartedAt = useRef(0);
   const player = previewPlayer();
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     cardStartedAt.current = performance.now();
@@ -115,11 +127,39 @@ export default function Discovery() {
     };
   }, [deck]);
 
+  const withSample = useCallback(
+    (card: CardModel): CardModel => {
+      const previewUrl = card.previewUrl ?? samples.get(card.key);
+      return previewUrl && previewUrl !== card.previewUrl ? { ...card, previewUrl } : card;
+    },
+    [samples],
+  );
+
+  // Silent artist/album cards ask the catalog for a preview just in time: the
+  // current card for its play button, the next one so a swipe can auto-play.
+  // Fire-and-forget; the deck never waits, and a miss stays "No sample".
+  useEffect(() => {
+    const cards = [state.pool[0], deck.prefetchQueue(state)[0]].filter(
+      (card): card is CardModel =>
+        card !== undefined && !card.previewUrl && !requested.current.has(card.key),
+    );
+    for (const card of cards) {
+      requested.current.add(card.key);
+      void catalog
+        .samplePreview(card)
+        .then((previewUrl) => {
+          if (!previewUrl || !mounted.current) return;
+          setSamples((current) => new Map(current).set(card.key, previewUrl));
+        })
+        .catch(() => undefined);
+    }
+  }, [catalog, deck, state]);
+
   // Keep the following card's sample warm. The current card loads on its first tap.
   useEffect(() => {
-    const upcoming = deck.prefetchQueue(state).find((card) => card.previewUrl);
+    const upcoming = deck.prefetchQueue(state).map(withSample).find((card) => card.previewUrl);
     if (upcoming) player.preload(upcoming);
-  }, [deck, player, state]);
+  }, [deck, player, state, withSample]);
 
   // Leaving the deck silences whatever was playing.
   useEffect(() => () => player.stop(), [player]);
@@ -136,12 +176,12 @@ export default function Discovery() {
       // Sound on: the promoted card starts inside the swipe gesture, which is
       // what the browser's autoplay policy allows without another tap.
       const promoted = next.pool[0];
-      if (sound && promoted) player.play(promoted);
+      if (sound && promoted) player.play(withSample(promoted));
       else player.stop();
 
       if (deck.shouldRefill()) void refill();
     },
-    [deck, player, refill, sound],
+    [deck, player, refill, sound, withSample],
   );
 
   useEffect(() => {
@@ -225,13 +265,13 @@ export default function Discovery() {
 
       <div className="deck__stack">
         <div className="deck__current">
-          <SwipeCard key={current.key} card={current} onCommit={react} />
+          <SwipeCard key={current.key} card={withSample(current)} onCommit={react} />
         </div>
         {/* Kept in the DOM (not shown) so the next cards' artwork and text are
             already loaded when a swipe promotes them. */}
         <div className="deck__upcoming" aria-hidden="true">
           {deck.prefetchQueue(state).map((card) => (
-            <Card key={card.key} card={card} />
+            <Card key={card.key} card={withSample(card)} />
           ))}
         </div>
       </div>
