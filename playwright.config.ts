@@ -1,6 +1,12 @@
+import { createHash } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 
-const port = Number(process.env.PORT) || 5173;
+// Worktrees share this sandbox, so a fixed default port collides with another
+// agent's dev server. PORT still wins; otherwise stay on a stable per-worktree
+// port so parallel e2e runs never fight over 5173.
+const port =
+  Number(process.env.PORT) ||
+  5200 + (Number.parseInt(createHash('sha1').update(process.cwd()).digest('hex').slice(0, 6), 16) % 27000);
 
 export default defineConfig({
   testDir: './e2e',
