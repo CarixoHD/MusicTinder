@@ -878,7 +878,8 @@ button {
    device floating on a page: chrome is the same canvas, no glass band. */
 @media (min-width: 1024px) {
   .app__header,
-  .tabbar {
+  .tabbar,
+  .setup__footer {
     background: var(--bg-canvas);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

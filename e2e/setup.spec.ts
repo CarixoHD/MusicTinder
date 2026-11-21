@@ -64,6 +64,10 @@ test('the album picker stores an album seed with its collection id', async ({ pa
   expect(await storedSeeds(page)).toMatchObject([
     { kind: 'album', name: 'Ada Vale No. 1', itunesCollectionId: 91011 },
   ]);
+  // The pick shows up right under the field, with the album's artwork.
+  const pill = page.getByRole('list', { name: 'Your seeds' }).getByRole('listitem');
+  await expect(pill).toContainText('Ada Vale No. 1');
+  await expect(pill.locator('img')).toHaveAttribute('src', /.+/);
 });
 
 test('an in-flight response for an older term never renders under the latest term', async ({
@@ -123,7 +127,7 @@ test('a rate-limited album search says Apple is limiting searches, and Retry run
     search: (_params, call) => (call === 1 ? { status: 429 } : undefined),
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Albums' }).click();
+  await page.getByRole('radiogroup', { name: 'Search scope' }).getByRole('radio', { name: 'Albums' }).check();
 
   await page.getByRole('searchbox', { name: 'Search albums' }).fill('ada');
 
