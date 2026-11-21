@@ -13,8 +13,11 @@
 .deck__stack {
   position: relative;
   /* Keep the card and its controls clear of the fixed tab bar on short
-     viewports; on a phone the cap is wider than the column and does nothing. */
-  max-width: min(100%, max(240px, calc(100svh - 380px)));
+     viewports, but never below most of the column: the artwork is the hero. */
+  max-width: min(100%, max(80%, calc(100svh - 380px)));
+  /* Auto cross-axis margins stop the column stretch, so without an explicit
+     width the card shrink-wraps its text and the artwork shrinks with it. */
+  width: 100%;
   margin-inline: auto;
 }
 
