@@ -237,6 +237,24 @@ describe('lookup cache', () => {
 });
 
 describe('iTunes budget', () => {
+  it('serialises concurrent lookups, one fetch in flight at a time', async () => {
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return jsonResponse(trackReply(String(input)));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await Promise.all([artistTopTracks(1, 1), artistTopTracks(2, 1), artistTopTracks(3, 1)]);
+
+    expect(maxInFlight).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('resolves empty without fetching once the budget is spent, and recovers after a minute', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
