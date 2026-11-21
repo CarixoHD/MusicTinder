@@ -162,16 +162,34 @@ function deezerRelated(deezerArtistId: number): unknown {
   };
 }
 
+export interface MockCatalogOptions {
+  /**
+   * Adjust one iTunes /search request before it is answered: delay it (to force
+   * out-of-order responses) or fail it once (to exercise the retry row).
+   */
+  search?: (params: URLSearchParams, call: number) => { delayMs?: number; fail?: boolean } | void;
+}
+
 /**
  * Mocks both catalog transports for one page. A request to either host that
  * the fixture does not know fails the test instead of passing through.
  */
-export async function mockCatalog(page: Page): Promise<void> {
+export async function mockCatalog(page: Page, options: MockCatalogOptions = {}): Promise<void> {
+  let searchCalls = 0;
+
   await page.route('https://itunes.apple.com/**', async (route) => {
     const url = new URL(route.request().url());
     let payload: unknown;
-    if (url.pathname === '/search') payload = itunesSearch(url.searchParams);
-    else if (url.pathname === '/lookup') payload = itunesLookup(url.searchParams);
+    if (url.pathname === '/search') {
+      searchCalls += 1;
+      const outcome = options.search?.(url.searchParams, searchCalls);
+      if (outcome?.delayMs) await new Promise((resolve) => setTimeout(resolve, outcome.delayMs));
+      if (outcome?.fail) {
+        await route.abort('failed');
+        return;
+      }
+      payload = itunesSearch(url.searchParams);
+    } else if (url.pathname === '/lookup') payload = itunesLookup(url.searchParams);
     if (payload === undefined) {
       throw new Error(`mockCatalog: unmatched iTunes request ${url.pathname}${url.search}`);
     }
