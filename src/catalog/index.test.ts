@@ -15,12 +15,10 @@ describe('createCatalog', () => {
     ]);
   });
 
-  it('stub adapters reject with a typed unknown CatalogError', async () => {
+  it('unimplemented adapters reject with a typed unknown CatalogError', async () => {
     const catalog = createCatalog();
     const failures = [
       () => catalog.searchSeeds('anything', 'artist'),
-      () => catalog.resolveDeezerArtist('anything'),
-      () => catalog.relatedArtists(1, 5),
       () => catalog.enrichArtist('anything'),
       () => catalog.artistTopTracks(1, 5),
       () => catalog.artistAlbums(1, 5),
