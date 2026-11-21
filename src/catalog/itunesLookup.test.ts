@@ -381,6 +381,46 @@ describe('iTunes budget', () => {
     expect(urls).toHaveLength(ITUNES_BUDGET);
   });
 
+  it('waits out a cool-down and resolves the visible card’s preview once a token refills', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    resetItunesBudget();
+    const urls = serveLookups(() => TRACK_RESPONSE);
+
+    for (let id = 1; id <= ITUNES_BUDGET; id += 1) {
+      await artistTopTracks(id, 1);
+    }
+    expect(urls).toHaveLength(ITUNES_BUDGET);
+
+    let settled = false;
+    const pending = samplePreview(albumCard, { waitForBudget: true, priority: true });
+    void pending.then(() => {
+      settled = true;
+    });
+
+    vi.advanceTimersByTime(1_000);
+    expect(settled).toBe(false);
+
+    vi.advanceTimersByTime(3_000);
+    await expect(pending).resolves.toBe(
+      'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
+    );
+    expect(urls).toHaveLength(ITUNES_BUDGET + 1);
+  });
+
+  it('answers a genuine no-preview lookup at once and never asks again', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    resetItunesBudget();
+    const urls = serveLookups(() => ({ resultCount: 0, results: [] }));
+
+    await expect(samplePreview(albumCard, { waitForBudget: true, priority: true })).resolves.toBeUndefined();
+    expect(urls).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(urls).toHaveLength(1);
+  });
+
   it('rejects as a rate error without fetching once the budget is spent, and recovers after a minute', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));

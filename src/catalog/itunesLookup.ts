@@ -1,6 +1,6 @@
 import { normalizeGenre } from '../chips';
-import { CatalogError, type Card, type Chip } from '../types';
-import { withItunesBudget } from './budget';
+import { CatalogError, type Card, type Chip, type SampleOptions } from '../types';
+import { withItunesBudget, type BudgetOptions } from './budget';
 import { cached } from './cache';
 
 /**
@@ -102,17 +102,14 @@ async function fetchResults(url: string): Promise<ItunesResult[]> {
 }
 
 /** `null` means the budget is cooling down: no token was spent and no fetch ran. */
-function lookupResults(path: string, reserve = 0): Promise<ItunesResult[] | null> {
+function lookupResults(path: string, options: BudgetOptions = {}): Promise<ItunesResult[] | null> {
   const url = `${ITUNES_API}${path}`;
-  return cached(url, () =>
-    withItunesBudget<ItunesResult[] | null>(null, () => fetchResults(url), reserve),
-  );
+  return cached(url, () => withItunesBudget<ItunesResult[] | null>(null, () => fetchResults(url), options));
 }
 
 /**
  * Card-building lookups must not turn a cool-down into an empty answer: the deck
- * would blame the seeds or claim the direction is exhausted. `samplePreview`
- * keeps treating it as "no sample", since nothing waits on it.
+ * would blame the seeds or claim the direction is exhausted.
  */
 const COOLING_DOWN = 'iTunes is cooling down';
 
@@ -128,7 +125,7 @@ const SAMPLE_RESERVE = 2;
 export async function enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
   const results = await lookupResults(
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
-    SAMPLE_RESERVE,
+    { reserve: SAMPLE_RESERVE },
   );
   if (results === null) throw new CatalogError('rate', COOLING_DOWN);
 
@@ -178,7 +175,7 @@ export async function artistTopTracks(itunesArtistId: number, limit: number): Pr
 export async function artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
   const results = await lookupResults(
     `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
-    SAMPLE_RESERVE,
+    { reserve: SAMPLE_RESERVE },
   );
   if (results === null) throw new CatalogError('rate', COOLING_DOWN);
   if (results.length === 0) {
@@ -207,22 +204,31 @@ export async function artistAlbums(itunesArtistId: number, limit: number): Promi
 /**
  * Just-in-time sample for a card the catalog ships without one: an album's
  * song lookup, or a song search for an artist. Fire-and-forget, so every
- * failure (cool-down, offline, no match) is the card's existing "no sample"
- * state rather than an error. Song cards already carry theirs.
+ * failure (offline, no match) is the card's existing "no sample" state rather
+ * than an error. An exhausted budget is not such a failure: with
+ * `waitForBudget` the lookup waits for the next token (and can be abandoned
+ * with `signal`), so a cooling-deck card still gets its sample. Song cards
+ * already carry theirs.
  */
-export async function samplePreview(card: Card): Promise<string | undefined> {
+export async function samplePreview(card: Card, options: SampleOptions = {}): Promise<string | undefined> {
   if (card.kind === 'song') return card.previewUrl;
+  const budget: BudgetOptions = {
+    wait: options.waitForBudget ?? false,
+    priority: options.priority ?? false,
+    signal: options.signal,
+  };
 
   try {
     if (card.kind === 'album') {
       const id = albumIdOf(card.key);
       if (id === undefined) return undefined;
-      const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${PREVIEW_LIMIT}`);
+      const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${PREVIEW_LIMIT}`, budget);
       return songs?.find((song) => song.previewUrl)?.previewUrl;
     }
 
     const results = await lookupResults(
       `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${PREVIEW_LIMIT}`,
+      budget,
     );
     return results?.find(
       (result) => result.previewUrl && nameScore(card.creator, result.artistName ?? '') > 0,
