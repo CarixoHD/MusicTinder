@@ -139,6 +139,8 @@ test('empty Liked explains itself and its button leads to Discover, which opens 
 
   await expect(page.getByRole('heading', { level: 1, name: 'Nothing saved yet' })).toBeVisible();
   await expect(page.getByText('Swipe a few cards and your finds collect here.')).toBeVisible();
+  // Balanced within the 32ch cap, so no lone last word.
+  await expect(page.locator('.empty-state__body')).toHaveCSS('text-wrap', 'balance');
 
   // With no seeds there is no deck to go back to: Discover opens Setup, the
   // same place a reset lands, instead of a second empty state with another hop.
