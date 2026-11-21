@@ -119,15 +119,17 @@ export default function SettingsSheet() {
             <h3 id="settings-sound-label" className="setup__label">
               Sound
             </h3>
-            <button
-              type="button"
-              role="switch"
-              className="chip"
-              aria-checked={settings.sound}
-              onClick={() => setSettings({ sound: !settings.sound })}
-            >
-              {settings.sound ? 'Sound is on' : 'Sound is off'}
-            </button>
+            <div className="chip-grid">
+              <button
+                type="button"
+                role="switch"
+                className="chip"
+                aria-checked={settings.sound}
+                onClick={() => setSettings({ sound: !settings.sound })}
+              >
+                {settings.sound ? 'Sound is on' : 'Sound is off'}
+              </button>
+            </div>
           </section>
 
           <section className="setup__section" aria-labelledby="settings-theme-label">

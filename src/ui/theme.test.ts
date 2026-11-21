@@ -72,6 +72,16 @@ describe('applyTheme', () => {
     expect(html()).toBe('dark');
     expect(metaColors()).toEqual(['#08090a', '#08090a']);
   });
+
+  it('restores the themed media pair when switching an override back to system', () => {
+    media.matches = true;
+    applyTheme('light');
+
+    applyTheme('system');
+
+    expect(html()).toBe('dark');
+    expect(metaColors()).toEqual(['#08090a', '#fafaf8']);
+  });
 });
 
 describe('watchTheme', () => {
