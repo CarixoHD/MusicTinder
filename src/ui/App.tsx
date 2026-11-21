@@ -1,7 +1,7 @@
 import { LazyMotion, MotionConfig } from 'motion/react';
 import { useEffect, type ComponentType } from 'react';
 import { useStore, type Screen } from '../store/store';
-import { DiscoverIcon, LikedIcon, SettingsIcon } from './icons';
+import { CloseIcon, DiscoverIcon, LikedIcon, SettingsIcon } from './icons';
 import Discovery from './screens/Discovery';
 import Liked from './screens/Liked';
 import SettingsSheet from './screens/SettingsSheet';
@@ -21,6 +21,8 @@ export function App() {
   const setScreen = useStore((state) => state.setScreen);
   const isSettingsOpen = useStore((state) => state.settingsOpen);
   const setSettingsOpen = useStore((state) => state.setSettingsOpen);
+  const storageNotice = useStore((state) => state.storageNotice);
+  const dismissStorageNotice = useStore((state) => state.dismissStorageNotice);
   const theme = useStore((state) => state.settings.theme);
 
   useEffect(() => {
@@ -48,6 +50,20 @@ export function App() {
               <SettingsIcon />
             </button>
           </header>
+
+          {storageNotice && (
+            <div className="notice" role="status">
+              <span>{storageNotice}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Dismiss notice"
+                onClick={dismissStorageNotice}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+          )}
 
           <main className="app__main">
             <ScreenView />
