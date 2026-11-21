@@ -89,7 +89,7 @@ class FixedCatalog implements Catalog {
 
 class FlakyCatalog extends FixedCatalog {
   failing = true;
-  kind: 'network' | 'rate' = 'network';
+  kind: 'network' | 'rate' | 'budget' = 'network';
 
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
     if (this.failing) throw new CatalogError(this.kind, this.kind);
@@ -393,7 +393,7 @@ describe('deck refill', () => {
 
     // The budget is spent, not the catalog down: the listener must keep swiping
     // without an outage notice.
-    catalog.kind = 'rate';
+    catalog.kind = 'budget';
     catalog.failing = true;
     const cooled = await deck.refill();
 
@@ -402,6 +402,12 @@ describe('deck refill', () => {
 
     const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
     expect(swiped.status).toBe('dealing');
+
+    // An upstream rate limit (Deezer quota, iTunes 403) is a catalog failure
+    // even with cards in hand, so it still offers Retry.
+    catalog.kind = 'rate';
+    const limited = await deck.refill();
+    expect(limited.status).toBe('stalled');
   });
 });
 

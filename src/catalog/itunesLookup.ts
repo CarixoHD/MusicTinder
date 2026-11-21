@@ -109,7 +109,8 @@ function lookupResults(path: string, options: BudgetOptions = {}): Promise<Itune
 
 /**
  * Card-building lookups must not turn a cool-down into an empty answer: the deck
- * would blame the seeds or claim the direction is exhausted.
+ * would blame the seeds or claim the direction is exhausted. A 'budget' error is
+ * the app's own allowance (no request failed), not the catalog being unreachable.
  */
 const COOLING_DOWN = 'iTunes is cooling down';
 
@@ -127,7 +128,7 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
     { reserve: SAMPLE_RESERVE },
   );
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
 
   let bestId: number | null = null;
   let bestChips: Chip[] = [];
@@ -147,7 +148,7 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
 
 export async function artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
   const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`);
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }
@@ -177,7 +178,7 @@ export async function artistAlbums(itunesArtistId: number, limit: number): Promi
     `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
     { reserve: SAMPLE_RESERVE },
   );
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }

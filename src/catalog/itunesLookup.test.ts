@@ -373,7 +373,7 @@ describe('iTunes budget', () => {
     }
     expect(urls).toHaveLength(ITUNES_BUDGET - 2);
     // …and reports the cool-down instead of answering "no albums".
-    await expect(artistAlbums(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+    await expect(artistAlbums(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
 
     // …so the current and next card's just-in-time previews still resolve.
     await expect(samplePreview(albumCard)).resolves.toBeDefined();
@@ -433,8 +433,8 @@ describe('iTunes budget', () => {
     expect(urls).toHaveLength(17);
 
     // A cool-down is a failure the caller can retry, never "nothing there".
-    await expect(artistTopTracks(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
-    await expect(enrichArtist('Ada Vale')).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+    await expect(artistTopTracks(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
+    await expect(enrichArtist('Ada Vale')).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     expect(urls).toHaveLength(17);
 
     vi.setSystemTime(new Date('2027-01-01T00:01:00Z'));

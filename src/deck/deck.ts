@@ -134,10 +134,10 @@ export function createDeck(init: DeckInit): Deck {
       } catch (error) {
         // A rejected refill keeps the cards already in hand and surfaces
         // `stalled` so the caller can offer a retry — except when the only
-        // failure is the app's own iTunes cool-down (a `rate` error) and there
-        // are cards to deal: the network is fine, so the deck keeps swiping and
-        // refills again later instead of telling the listener the catalog is down.
-        const coolingDown = error instanceof CatalogError && error.kind === 'rate';
+        // failure is the app's own iTunes budget cooling down and there are
+        // cards to deal: nothing failed on the network, so the deck keeps
+        // swiping and refills later instead of claiming the catalog is down.
+        const coolingDown = error instanceof CatalogError && error.kind === 'budget';
         if (!coolingDown || state.pool.length === 0) state = { ...state, status: 'stalled' };
       }
       return state;
