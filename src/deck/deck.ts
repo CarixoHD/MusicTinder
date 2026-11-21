@@ -157,7 +157,14 @@ export function createDeck(init: DeckInit): Deck {
     for (const card of cards) {
       if (!seen.has(card.key) && !unique.has(card.key)) unique.set(card.key, card);
     }
-    const all = [...unique.values()];
+    const queued = [...unique.values()];
+    // Turning wildcards off drops queued exploration at the next commit/refill;
+    // only the card already on screen stays, since replacing it under the
+    // listener would be worse than showing one last wildcard.
+    const all =
+      wildcardsOn || visible === 0
+        ? queued
+        : queued.filter((card, index) => !card.wildcard || index === 0);
     // The current card and the prefetched stack are already rendered; a refill
     // may only reorder what comes after them.
     const shown = all.slice(0, visible);

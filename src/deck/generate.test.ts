@@ -382,56 +382,80 @@ const WILDCARD_HITS: SeedCandidate[] = Array.from({ length: 5 }, (_, index) => (
   chips: ['jazz'] as Chip[],
 }));
 
+/** A small related-artist branch on chips the listener already likes. */
+const ON_TASTE_BRANCH: Card[] = [1, 2].map((n) => ({
+  key: `dz:artist:${7100 + n}`,
+  kind: 'artist',
+  source: 'deezer',
+  title: `On Taste ${n}`,
+  creator: `On Taste ${n}`,
+  creatorKey: `on taste ${n}`,
+  image: `https://cdn.example.test/artists/${7100 + n}.jpg`,
+  chips: ['electronic'],
+}));
+
 /**
- * Answers a genre-chip search with outside artists and counts the iTunes
- * enrichment each one costs, so wildcard spending is observable.
+ * No related artist falls outside the top chips, so a wildcard has to come
+ * from the genre search; counts the searches and the enrichment each costs.
  */
-class WildcardCatalog extends FakeCatalog {
+class WildcardCatalog implements Catalog {
   readonly searches: string[] = [];
   readonly wildcardEnrichments: string[] = [];
 
-  constructor(private readonly hits: SeedCandidate[] = WILDCARD_HITS) {
-    super();
-  }
+  constructor(
+    private readonly hits: SeedCandidate[] = WILDCARD_HITS,
+    private readonly branch: Card[] = ON_TASTE_BRANCH,
+  ) {}
 
-  override async searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]> {
+  async searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]> {
     this.searches.push(term);
-    if (type !== 'artist') return super.searchSeeds(term, type);
-    return this.hits;
+    return type === 'artist' ? this.hits : [];
   }
 
-  override async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
-    const hit = this.hits.find((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase());
+  async resolveDeezerArtist(name: string): Promise<{ id: number; name: string }> {
+    return { id: 1, name };
+  }
+
+  async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return deezerArtistId === 4101 ? this.branch.slice(0, limit) : [];
+  }
+
+  async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    const key = name.trim().toLowerCase();
+    const hit = this.hits.find((candidate) => candidate.name.toLowerCase() === key);
     if (hit) {
       this.wildcardEnrichments.push(hit.name);
       return { itunesArtistId: hit.itunesId ?? 0, chips: hit.chips };
     }
-    return super.enrichArtist(name);
+    const card = this.branch.find((candidate) => candidate.creatorKey === key);
+    return card ? { itunesArtistId: 9000, chips: card.chips } : null;
   }
 
-  override async artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+  async artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+    return this.releases(itunesArtistId, limit, 'album');
+  }
+
+  async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
+    return this.releases(itunesArtistId, limit, 'song');
+  }
+
+  async samplePreview(): Promise<undefined> {
+    return undefined;
+  }
+
+  private releases(itunesArtistId: number, limit: number, kind: Card['kind']): Card[] {
     const hit = this.hits.find((candidate) => candidate.itunesId === itunesArtistId);
-    if (!hit) return super.artistAlbums(itunesArtistId, limit);
-    return [1, 2].slice(0, limit).map((n) => this.release(hit, `it:album:${itunesArtistId}${n}`, 'album', n));
-  }
-
-  override async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
-    const hit = this.hits.find((candidate) => candidate.itunesId === itunesArtistId);
-    if (!hit) return super.artistTopTracks(itunesArtistId, limit);
-    return [1, 2].slice(0, limit).map((n) => this.release(hit, `it:track:${itunesArtistId}${n}`, 'song', n));
-  }
-
-  private release(hit: SeedCandidate, key: string, kind: Card['kind'], n: number): Card {
-    return {
-      key,
+    if (!hit) return [];
+    return [1, 2].slice(0, limit).map((n) => ({
+      key: `it:${kind}:${itunesArtistId}${n}`,
       kind,
-      source: 'itunes',
+      source: 'itunes' as const,
       title: `${hit.name} ${kind} ${n}`,
       creator: hit.name,
       creatorKey: hit.name.toLowerCase(),
       chips: hit.chips,
-      image: `https://cdn.example.test/${key}.jpg`,
-    };
+      image: `https://cdn.example.test/${kind}/${itunesArtistId}${n}.jpg`,
+    }));
   }
 }
 

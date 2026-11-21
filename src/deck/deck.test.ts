@@ -164,7 +164,16 @@ class WildcardBranchCatalog implements Catalog {
 
   async searchSeeds(term: string): Promise<SeedCandidate[]> {
     this.searches.push(term);
-    return [];
+    return [
+      {
+        itunesId: 8800,
+        kind: 'artist',
+        name: 'Outside Surprise',
+        creator: 'Outside Surprise',
+        image: 'https://cdn.example.test/artists/8800.jpg',
+        chips: ['pop'],
+      },
+    ];
   }
 
   async resolveDeezerArtist(name: string) {
@@ -176,6 +185,9 @@ class WildcardBranchCatalog implements Catalog {
   }
 
   async enrichArtist(name: string) {
+    if (name.trim().toLowerCase() === 'outside surprise') {
+      return { itunesArtistId: 8800, chips: ['pop'] };
+    }
     const card = [...this.branchCards.values()].flat().find((entry) => entry.creatorKey === name.trim().toLowerCase());
     return card ? { itunesArtistId: 5000, chips: card.chips } : null;
   }
@@ -929,13 +941,19 @@ describe('deck wildcards', () => {
     await deck.refill();
     expect(deck.state.pool.some((card) => card.wildcard)).toBe(true);
 
+    // A refill already drops the queued ones (the current card is regular here).
     deck.setWildcards(false);
-    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 9000 });
-    expect(swiped.pool.some((card) => card.wildcard)).toBe(false);
+    const hidden = await deck.refill();
+    expect(hidden.pool.some((card) => card.wildcard)).toBe(false);
 
     deck.setWildcards(true);
     const resumed = await deck.refill();
     expect(resumed.pool.some((card) => card.wildcard)).toBe(true);
+
+    // A swipe commits without them too.
+    deck.setWildcards(false);
+    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 9000 });
+    expect(swiped.pool.some((card) => card.wildcard)).toBe(false);
   });
 
   it('keeps a wildcard below the quality floor, but never deals one already seen', async () => {
