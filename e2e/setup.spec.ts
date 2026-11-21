@@ -1,0 +1,198 @@
+import { expect, test, type Page } from '@playwright/test';
+import { mockCatalog } from './fixtures';
+
+const ACCENT = 'rgb(139, 143, 240)';
+const ACCENT_SUBTLE = 'rgba(139, 143, 240, 0.14)';
+
+const storedSeeds = (page: Page): Promise<unknown> =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? '{}').state?.seeds ?? []);
+
+const storedCardType = (page: Page): Promise<unknown> =>
+  page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? '{}').state?.settings?.cardType);
+
+test('typing shows matching artists and picking one stores its iTunes id', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  const input = page.getByRole('searchbox', { name: 'Search artists' });
+  await input.fill('ada');
+
+  await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
+  await page.getByRole('button', { name: /Ada Vale/ }).click();
+
+  await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
+  expect(await storedSeeds(page)).toMatchObject([
+    { kind: 'artist', name: 'Ada Vale', itunesArtistId: 9101, chips: ['electronic'] },
+  ]);
+});
+
+test('the album picker stores an album seed with its collection id', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Albums' }).click();
+  const input = page.getByRole('searchbox', { name: 'Search albums' });
+  await input.fill('ada');
+
+  await page.getByRole('button', { name: /Ada Vale No\. 1/ }).click();
+
+  expect(await storedSeeds(page)).toMatchObject([
+    { kind: 'album', name: 'Ada Vale No. 1', itunesCollectionId: 91011 },
+  ]);
+});
+
+test('an older response never overwrites results for the latest term', async ({ page }) => {
+  await mockCatalog(page, {
+    search: (params) => (params.get('term') === 'ada' ? { delayMs: 800 } : undefined),
+  });
+  await page.goto('/');
+
+  const input = page.getByRole('searchbox', { name: 'Search artists' });
+  await input.fill('ada');
+  await page.waitForRequest(
+    (request) => request.url().includes('itunes.apple.com/search') && request.url().includes('term=ada'),
+  );
+
+  await input.fill('north');
+  await expect(page.getByRole('button', { name: /North Static/ })).toBeVisible();
+
+  // The slow answer for "ada" lands after "north" was shown: it must be ignored.
+  await page.waitForResponse(
+    (response) => response.url().includes('itunes.apple.com/search') && response.url().includes('term=ada'),
+  );
+  await expect(page.getByRole('button', { name: /North Static/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ada Vale/ })).toHaveCount(0);
+});
+
+test('a term with no hits shows an inline no-match row', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('zzz');
+
+  await expect(page.getByText('No match for ‘zzz’')).toBeVisible();
+});
+
+test('a failed search explains itself inline and Retry runs it again', async ({ page }) => {
+  await mockCatalog(page, {
+    search: (_params, call) => (call === 1 ? { fail: true } : undefined),
+  });
+  await page.goto('/');
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+
+  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await page.getByRole('button', { name: 'Retry' }).click();
+
+  await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
+  await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
+});
+
+test('a genre chip toggles its seed and styles itself with the accent', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  const pop = page.getByRole('button', { name: 'Pop', exact: true });
+  await expect(pop).toHaveAttribute('aria-pressed', 'false');
+
+  await pop.click();
+  await expect(pop).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(() => pop.evaluate((el) => getComputedStyle(el).backgroundColor))
+    .toBe(ACCENT_SUBTLE);
+  const selected = await pop.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { border: style.borderTopColor, color: style.color };
+  });
+  expect(selected).toEqual({ border: ACCENT, color: ACCENT });
+  expect(await storedSeeds(page)).toMatchObject([{ id: 'genre:pop', kind: 'genre', chips: ['pop'] }]);
+
+  await pop.click();
+  await expect(pop).toHaveAttribute('aria-pressed', 'false');
+  expect(await storedSeeds(page)).toEqual([]);
+});
+
+test('the card-type control switches Artists, Albums and Songs and persists', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  await page.getByRole('button', { name: 'Albums' }).click();
+  await expect(page.getByRole('button', { name: 'Albums' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Artists' })).toHaveAttribute('aria-pressed', 'false');
+  expect(await storedCardType(page)).toBe('album');
+
+  await page.getByRole('button', { name: 'Songs' }).click();
+  await expect(page.getByRole('button', { name: 'Songs' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Albums' })).toHaveAttribute('aria-pressed', 'false');
+  expect(await storedCardType(page)).toBe('song');
+});
+
+test('Start discovering waits for a seed, opens Discovery and the setup survives a reload', async ({
+  page,
+}) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  const start = page.getByRole('button', { name: 'Start discovering' });
+  await expect(start).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Albums' }).click();
+  await page.getByRole('button', { name: 'Pop', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Search albums' }).fill('north');
+  await page.getByRole('button', { name: /North Static No\. 1/ }).click();
+
+  await expect(start).toBeEnabled();
+  await start.click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your deck is getting ready' })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Your deck is getting ready' })).toBeVisible();
+  await page.getByRole('button', { name: 'Change seeds' }).click();
+
+  await expect(page.getByRole('button', { name: 'Albums' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Pop', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Remove North Static No. 1' })).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: 'Search albums' })).toBeVisible();
+});
+
+test('every setup control is at least 44 px tall and reachable by keyboard with a focus ring', async ({
+  page,
+}) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  const ring = () =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      if (active === null) return null;
+      const style = getComputedStyle(active);
+      return { style: style.outlineStyle, width: style.outlineWidth };
+    });
+
+  // Tab from the untouched page: header settings, then the seed search.
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('searchbox', { name: 'Search artists' })).toBeFocused();
+  expect((await ring())?.style).toBe('solid');
+
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Artists' })).toBeFocused();
+  const buttonRing = await ring();
+  expect(buttonRing?.style).toBe('solid');
+  expect(Number.parseFloat(buttonRing?.width ?? '0')).toBeGreaterThanOrEqual(2);
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+  await page.getByRole('button', { name: /Ada Vale/ }).click();
+
+  const controls = [
+    page.getByRole('searchbox', { name: 'Search artists' }),
+    page.getByRole('button', { name: 'Artists' }),
+    page.getByRole('button', { name: 'Pop', exact: true }),
+    page.getByRole('button', { name: 'Remove Ada Vale' }),
+    page.getByRole('button', { name: 'Start discovering' }),
+  ];
+  for (const control of controls) {
+    const box = await control.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+});
