@@ -66,6 +66,7 @@ export async function relatedArtists(deezerArtistId: number, limit: number): Pro
     creator: artist.name,
     creatorKey: creatorKey(artist.name),
     image: artist.picture_big,
+    fans: artist.nb_fan,
     // Deezer preview URLs are signed and expire in ~15 min: never store one on a card.
     chips: [],
   }));
