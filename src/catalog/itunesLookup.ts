@@ -60,7 +60,10 @@ const chipsOf = (result: ItunesResult): Chip[] =>
 /** Apple hands out 100px artwork; the card shows it at 600px. */
 const artwork600 = (url?: string): string | undefined => url?.replace(/\/\d+x\d+bb\./, '/600x600bb.');
 
-const PREVIEW_LIMIT = 5;
+/** A song lookup by album id: the album's own tracks fill the first hits. */
+const ALBUM_SONGS_LIMIT = 5;
+/** Short or common artist names put other acts first; one wider search finds the real one. */
+const ARTIST_SONGS_LIMIT = 25;
 
 const albumIdOf = (key: string): number | undefined => {
   const match = /^it:album:(\d+)$/.exec(key);
@@ -237,12 +240,11 @@ export async function artistAlbums(
 
 /**
  * Just-in-time sample for a card the catalog ships without one: an album's
- * song lookup, or a song search for an artist. Fire-and-forget, so every
- * failure (offline, no match) is the card's existing "no sample" state rather
- * than an error. An exhausted budget is not such a failure: with
- * `waitForBudget` the lookup waits for the next token (and can be abandoned
- * with `signal`), so a cooling-deck card still gets its sample. Song cards
- * already carry theirs. The sample names its song so the card can show it.
+ * song lookup, or a song search for an artist. A genuine no-match resolves
+ * `undefined`; a failure (offline, HTTP error, cooling budget) rejects so the
+ * caller can tell a miss from a transient error and retry. With `waitForBudget`
+ * the lookup waits for the next token (abandonable with `signal`), so a
+ * cooling-deck card still gets its sample. The sample names its song.
  */
 export async function samplePreview(card: Card, options: SampleOptions = {}): Promise<Sample | undefined> {
   if (card.kind === 'song') {
@@ -257,25 +259,33 @@ export async function samplePreview(card: Card, options: SampleOptions = {}): Pr
   const sampleOf = (result?: ItunesResult): Sample | undefined =>
     result?.previewUrl ? { previewUrl: result.previewUrl, title: result.trackName } : undefined;
 
-  try {
-    if (card.kind === 'album') {
-      const id = albumIdOf(card.key);
-      if (id === undefined) return undefined;
-      const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${PREVIEW_LIMIT}`, budget);
-      return sampleOf(songs?.find((song) => song.previewUrl));
+  /** Rows may be filled by other artists: the exact name beats a partial hit. */
+  const bestByArtist = (results: ItunesResult[], artist: string): ItunesResult | undefined => {
+    let best: ItunesResult | undefined;
+    let bestScore = 0;
+    for (const result of results) {
+      if (!result.previewUrl) continue;
+      const score = nameScore(artist, result.artistName ?? '');
+      if (score > bestScore) {
+        best = result;
+        bestScore = score;
+      }
     }
+    return best;
+  };
 
-    const results = await lookupResults(
-      `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${PREVIEW_LIMIT}`,
-      budget,
-    );
-    return sampleOf(
-      results?.find(
-        (result) => result.previewUrl && nameScore(card.creator, result.artistName ?? '') > 0,
-      ),
-    );
-  } catch {
-    // Network failure or an exhausted budget: the card reads "No sample".
-    return undefined;
+  if (card.kind === 'album') {
+    const id = albumIdOf(card.key);
+    if (id === undefined) return undefined;
+    const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${ALBUM_SONGS_LIMIT}`, budget);
+    if (songs === null) throw new CatalogError('budget', COOLING_DOWN);
+    return sampleOf(songs.find((song) => song.previewUrl));
   }
+
+  const results = await lookupResults(
+    `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${ARTIST_SONGS_LIMIT}`,
+    budget,
+  );
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
+  return sampleOf(bestByArtist(results, card.creator));
 }

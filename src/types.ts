@@ -103,6 +103,8 @@ export interface Card {
   because?: string;
   /** Song title of the just-in-time sample attached by Discovery, when known. */
   sampleTitle?: string;
+  /** Discovery is still waiting on this card's sample lookup: the play slot shows "Finding sample". */
+  samplePending?: boolean;
 }
 
 export interface Reaction {

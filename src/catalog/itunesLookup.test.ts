@@ -318,7 +318,62 @@ describe('samplePreview', () => {
       previewUrl: 'https://audio.example.test/right.m4a',
       title: 'Right Song',
     });
-    expect(urls[0]).toBe('https://itunes.apple.com/search?term=Ada%20Vale&media=music&entity=song&limit=5');
+    expect(urls[0]).toBe('https://itunes.apple.com/search?term=Ada%20Vale&media=music&entity=song&limit=25');
+  });
+
+  it('finds the artist’s song when other artists’ hits fill the first five search results', async () => {
+    server.use(
+      http.get(ITUNES_SEARCH, () =>
+        HttpResponse.json({
+          resultCount: 7,
+          results: [
+            ...Array.from({ length: 6 }, (_, index) => ({
+              kind: 'song',
+              artistName: `Someone Else ${index}`,
+              trackName: `Wrong Song ${index}`,
+              previewUrl: `https://audio.example.test/wrong-${index}.m4a`,
+            })),
+            {
+              kind: 'song',
+              artistName: 'Ada Vale',
+              trackName: 'Right Song',
+              previewUrl: 'https://audio.example.test/right.m4a',
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(samplePreview(artistCard)).resolves.toEqual({
+      previewUrl: 'https://audio.example.test/right.m4a',
+      title: 'Right Song',
+    });
+  });
+
+  it('prefers the exact artist name over an earlier hit whose artist merely contains it', async () => {
+    server.use(
+      http.get(ITUNES_SEARCH, () =>
+        HttpResponse.json({
+          resultCount: 2,
+          results: [
+            {
+              kind: 'song',
+              artistName: 'Ada Vale Tribute Band',
+              trackName: 'Cover Song',
+              previewUrl: 'https://audio.example.test/cover.m4a',
+            },
+            {
+              kind: 'song',
+              artistName: 'Ada Vale',
+              trackName: 'Right Song',
+              previewUrl: 'https://audio.example.test/right.m4a',
+            },
+          ],
+        }),
+      ),
+    );
+
+    await expect(samplePreview(artistCard)).resolves.toMatchObject({ title: 'Right Song' });
   });
 
   it('serves a repeat call for the same card from cache with the same title and no second fetch', async () => {
@@ -336,13 +391,19 @@ describe('samplePreview', () => {
     expect(urls).toHaveLength(1);
   });
 
-  it('resolves undefined without throwing when the network fails', async () => {
+  it('rejects with a network CatalogError when the lookup fails, so a caller can retry', async () => {
     server.use(http.get(ITUNES_LOOKUP, () => HttpResponse.error()));
 
-    await expect(samplePreview(albumCard)).resolves.toBeUndefined();
+    await expect(samplePreview(albumCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
   });
 
-  it('resolves undefined without fetching once the budget has cooled down', async () => {
+  it('rejects when Apple answers an error status instead of reporting a genuine no-match', async () => {
+    server.use(http.get(ITUNES_SEARCH, () => new HttpResponse(null, { status: 500 })));
+
+    await expect(samplePreview(artistCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
+  });
+
+  it('rejects as a retryable budget error without fetching once the budget has cooled down', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
     resetItunesBudget();
@@ -351,7 +412,7 @@ describe('samplePreview', () => {
     for (let id = 1; id <= 17; id += 1) {
       await artistTopTracks(id, 1);
     }
-    await expect(samplePreview(albumCard)).resolves.toBeUndefined();
+    await expect(samplePreview(albumCard)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     expect(urls).toHaveLength(17);
   });
 });

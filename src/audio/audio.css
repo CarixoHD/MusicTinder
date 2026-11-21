@@ -74,7 +74,7 @@
   transition: stroke-dashoffset var(--duration-fast) linear;
 }
 
-/* No-preview cards: a visible, non-interactive "No sample" pill. */
+/* No-preview cards: a visible, non-interactive pill that waits or says "No sample". */
 .play-button--empty {
   display: inline-flex;
   align-items: center;
@@ -91,5 +91,23 @@
 }
 
 .play-button__label {
+  display: grid;
   white-space: nowrap;
+}
+
+/* Both states share one pill footprint: the hidden wider label sizes the cell,
+   so the label that answers never shifts the card. */
+.play-button__label > span,
+.play-button__label::after {
+  grid-area: 1 / 1;
+}
+
+.play-button__label::after {
+  content: 'Finding sample';
+  visibility: hidden;
+}
+
+/* The wait is quiet: same pill, secondary text instead of primary. */
+.play-button--loading {
+  color: var(--text-secondary);
 }
