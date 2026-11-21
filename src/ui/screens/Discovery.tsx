@@ -210,9 +210,6 @@ export default function Discovery() {
         </button>
       </div>
 
-      <p className="deck__hint" aria-hidden="true">
-        Press ← or → to skip or like
-      </p>
     </section>
   );
 }

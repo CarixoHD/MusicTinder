@@ -56,18 +56,3 @@
   color: var(--accent);
 }
 
-.deck__hint {
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: var(--text-micro-size);
-  line-height: var(--text-micro-line);
-  letter-spacing: var(--text-micro-tracking);
-  text-align: center;
-}
-
-/* No keyboard on a phone: the hint would be noise. */
-@media (hover: none) {
-  .deck__hint {
-    display: none;
-  }
-}
