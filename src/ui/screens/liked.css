@@ -1,3 +1,21 @@
+/* Rows reveal in with a 30 ms-per-row stagger once per visit; the delay comes
+   from each row's inline animation-delay. Off under reduced motion. */
+.liked-row-item {
+  animation: liked-row-in 180ms var(--ease-standard) both;
+}
+
+@keyframes liked-row-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .liked-row-item {
+    animation: none;
+  }
+}
+
 .liked-list {
   display: flex;
   flex-direction: column;

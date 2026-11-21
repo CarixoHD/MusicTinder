@@ -7,6 +7,7 @@ import Liked from './screens/Liked';
 import SettingsSheet from './screens/SettingsSheet';
 import Setup from './screens/Setup';
 import { watchTheme } from './theme';
+import { withTransition } from './transition';
 
 const SCREENS: Record<Screen, ComponentType> = {
   setup: Setup,
@@ -71,7 +72,7 @@ export function App() {
               type="button"
               className="tabbar__button"
               aria-current={screen === 'discovery' ? 'page' : undefined}
-              onClick={() => setScreen('discovery')}
+              onClick={() => withTransition(() => setScreen('discovery'))}
             >
               <DiscoverIcon />
               Discover
@@ -80,7 +81,7 @@ export function App() {
               type="button"
               className="tabbar__button"
               aria-current={screen === 'liked' ? 'page' : undefined}
-              onClick={() => setScreen('liked')}
+              onClick={() => withTransition(() => setScreen('liked'))}
             >
               <LikedIcon />
               Liked

@@ -8,6 +8,8 @@ import type { TasteWeights } from '../../types';
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { DeckNotice } from '../components/DeckNotice';
+import { SwipeCard } from '../components/SwipeCard';
+import { withTransition } from '../transition';
 import './discovery.css';
 
 const tasteIsEmpty = (taste: TasteWeights) =>
@@ -181,7 +183,7 @@ export default function Discovery() {
             emptyReason={state.emptyReason}
             hasCards={false}
             onRetry={freshDeck}
-            onChangeSeeds={() => setScreen('setup')}
+            onChangeSeeds={() => withTransition(() => setScreen('setup'))}
           />
         </section>
       );
@@ -199,7 +201,7 @@ export default function Discovery() {
           <Button variant="primary" onClick={freshDeck}>
             Fresh deck
           </Button>
-          <Button variant="secondary" onClick={() => setScreen('setup')}>
+          <Button variant="secondary" onClick={() => withTransition(() => setScreen('setup'))}>
             Change seeds
           </Button>
         </div>
@@ -218,12 +220,12 @@ export default function Discovery() {
         emptyReason={state.emptyReason}
         hasCards
         onRetry={freshDeck}
-        onChangeSeeds={() => setScreen('setup')}
+        onChangeSeeds={() => withTransition(() => setScreen('setup'))}
       />
 
       <div className="deck__stack">
         <div className="deck__current">
-          <Card key={current.key} card={current} />
+          <SwipeCard key={current.key} card={current} onCommit={react} />
         </div>
         {/* Kept in the DOM (not shown) so the next cards' artwork and text are
             already loaded when a swipe promotes them. */}
