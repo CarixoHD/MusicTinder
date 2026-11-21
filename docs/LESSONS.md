@@ -22,3 +22,6 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) A component that adopts a long-lived object across mounts must subscribe to its changes (or re-join its pending promise); a .then() bound to the mount that started the work leaves later mounts stale.
 - (milestone review) Test session/retention features with work still in flight at the moment of leaving and returning, not only when everything has already settled.
 - (milestone review) When a wipe has to invalidate state held outside React, a runtime epoch in the store that the session key includes is a simple, testable way to do it; also guard any effect that writes data back into the store against output from an older epoch.
+- (milestone review) A budget cool-down (withItunesBudget resolving its empty fallback) must reach the deck as a retryable state, never as 'nothing there'. Otherwise empty-state copy blames the seeds or claims the deck has ended.
+- (milestone review) Anything that adds work to the serialised iTunes queue (seed search included) needs a fetch timeout, so one hung request cannot freeze every later request.
+- (milestone review) E2e tests should assert the settled screen, not a transient loading heading that a fast failure state can replace.
