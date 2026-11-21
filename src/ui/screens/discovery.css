@@ -1,0 +1,73 @@
+/* Discovery deck: the card is the one memorable element, the controls stay quiet. */
+
+.deck {
+  gap: var(--space-4);
+}
+
+.deck__stack {
+  position: relative;
+}
+
+/* The next cards are laid out but invisible: they are the prefetch buffer, so
+   artwork and text are decoded before a swipe promotes them. */
+.deck__upcoming {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.deck__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-7);
+  padding-top: var(--space-2);
+}
+
+.deck-action {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-pill);
+  background: var(--bg-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass));
+  backdrop-filter: blur(var(--blur-glass));
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+
+.deck-action:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.deck-action:active {
+  transform: scale(0.94);
+}
+
+.deck-action--like {
+  color: var(--accent);
+}
+
+.deck__hint {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: var(--text-micro-size);
+  line-height: var(--text-micro-line);
+  letter-spacing: var(--text-micro-tracking);
+  text-align: center;
+}
+
+/* No keyboard on a phone: the hint would be noise. */
+@media (hover: none) {
+  .deck__hint {
+    display: none;
+  }
+}
