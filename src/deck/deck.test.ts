@@ -216,6 +216,40 @@ describe('deck refill', () => {
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
   });
+
+  it('keeps the cards in hand after a background refill fails and asks to try again', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    catalog.failing = false;
+    const dealt = await deck.refill();
+    expect(dealt.status).toBe('dealing');
+
+    catalog.failing = true;
+    const stalled = await deck.refill();
+
+    expect(stalled.status).toBe('stalled');
+    expect(stalled.pool).toEqual(dealt.pool);
+    // There are still cards to swipe, so a later swipe must be able to retry
+    // the catalog instead of the deck staying stalled forever.
+    expect(deck.shouldRefill()).toBe(true);
+
+    while (deck.state.pool.length > 0) {
+      deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    }
+    // Running out of cards while the catalog is down is still a catalog
+    // failure, never the deck-end copy that blames the seeds.
+    expect(deck.state.status).toBe('stalled');
+
+    catalog.failing = false;
+    const recovered = await deck.refill();
+    // A successful refill clears the failure; the deck really is exhausted now.
+    expect(recovered.status).toBe('empty');
+  });
 });
 
 describe('deck commit', () => {
@@ -346,28 +380,5 @@ describe('deck commit', () => {
     catalog.failing = false;
     const retried = await deck.refill();
     expect(retried.status).toBe('dealing');
-  });
-
-  it('keeps the stalled failure when a failed refill drains the last cards, not a quiet deck end', async () => {
-    const catalog = new FlakyCatalog(controlledCards());
-    catalog.failing = false;
-    const deck = createDeck({
-      catalog,
-      seeds: [ANCHOR],
-      cardType: 'artist',
-      taste: initTaste([ANCHOR]),
-    });
-    await deck.refill();
-
-    // Offline mid-session: the refill fails, the dealt cards keep swiping.
-    catalog.failing = true;
-    await deck.refill();
-    while (deck.state.pool.length > 0) {
-      deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
-    }
-
-    expect(deck.state.pool).toEqual([]);
-    expect(deck.state.status).toBe('stalled');
-    expect(deck.state.emptyReason).toBeNull();
   });
 });

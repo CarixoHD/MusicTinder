@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { previewPlayer } from '../../audio/player';
 import { createCatalog } from '../../catalog';
-import { createDeck, type DeckState } from '../../deck/deck';
+import { createDeck, type Deck, type DeckState } from '../../deck/deck';
 import { useStore } from '../../store/store';
 import { initTaste } from '../../taste/taste';
-import type { Card as CardModel, Catalog, TasteWeights } from '../../types';
+import type { Card as CardModel, CardKind, Catalog, Seed, TasteWeights } from '../../types';
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { DeckNotice } from '../components/DeckNotice';
@@ -14,6 +14,15 @@ import './discovery.css';
 
 const tasteIsEmpty = (taste: TasteWeights) =>
   Object.keys(taste.chips).length === 0 && Object.keys(taste.creators).length === 0;
+
+// The deck outlives the Discovery screen: peeking at Liked and coming back is
+// normal use and must return to the same card. A session-level deck keeps the
+// pool (and its dealt-behind cards) in memory; switching seeds or card type
+// builds a new one. Never persisted — a reload starts a fresh session.
+let session: { key: string; catalog: Catalog | null; deck: Deck } | null = null;
+
+const sessionKey = (seeds: Seed[], cardType: CardKind): string =>
+  `${cardType}|${seeds.map((seed) => `${seed.kind}:${seed.id}:${seed.name}`).join('|')}`;
 
 function LikeIcon() {
   return (
@@ -64,21 +73,25 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const setScreen = useStore((state) => state.setScreen);
   const settingsOpen = useStore((state) => state.settingsOpen);
 
-  // The deck is runtime state: one per visit, built from the store snapshot on
-  // entry. Leaving Discovery (fresh seeds, or Setup) builds a new one.
+  // The deck belongs to the session, not to this mount: returning from Liked
+  // finds the same pool instead of re-dealing from the catalog.
   const [catalog] = useState(() => injected ?? createCatalog());
-  const [deck] = useState(() =>
-    createDeck({
+  const [deck] = useState(() => {
+    const key = sessionKey(seeds, cardType);
+    if (session && session.key === key && session.catalog === (injected ?? null)) return session.deck;
+    const deck = createDeck({
       catalog,
       seeds,
       cardType,
       taste: tasteIsEmpty(taste) && seeds.length > 0 ? initTaste(seeds) : taste,
       seen,
       sink: { setTaste, markSeen, addLiked },
-    }),
-  );
+    });
+    session = { key, catalog: injected ?? null, deck };
+    return deck;
+  });
   const [state, setState] = useState<DeckState>(deck.state);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => deck.state.status === 'dealing' && !deck.state.pool.length);
   // Previews resolved for cards the catalog ships silent, keyed by card key.
   const [samples, setSamples] = useState<ReadonlyMap<string, string>>(() => new Map());
   const requested = useRef(new Set<string>());
@@ -120,6 +133,9 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   }, [deck, seeds.length, setTaste, taste]);
 
   useEffect(() => {
+    // Only a deck that has never been dealt (this mount or a previous visit)
+    // needs the initial refill; a retained deck keeps its cards in hand.
+    if (deck.state.status !== 'dealing' || deck.state.pool.length > 0) return;
     let cancelled = false;
     deck.refill().then((next) => {
       if (cancelled) return;
