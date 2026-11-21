@@ -193,6 +193,48 @@ const relatedAlbumResult = (name: string, release: { itunesId: number; genre: st
   collectionViewUrl: `https://music.apple.com/album/${release.itunesId * 10 + 1}`,
 });
 
+const relatedSongResult = (
+  name: string,
+  release: { itunesId: number; genre: string },
+  n: number,
+) => ({
+  wrapperType: 'track',
+  kind: 'song',
+  trackId: release.itunesId * 100 + n,
+  trackName: `${name} release ${n}`,
+  artistId: release.itunesId,
+  artistName: name,
+  collectionId: release.itunesId * 10 + 1,
+  collectionName: `${name} No. 1`,
+  primaryGenreName: release.genre,
+  releaseDate: `2022-0${n}-01T00:00:00Z`,
+  artworkUrl100: artwork(`${release.itunesId}${n}`),
+  previewUrl: n === 4 ? undefined : `https://audio.example.test/${release.itunesId}${n}.m4a`,
+  trackViewUrl: `https://music.apple.com/album/${release.itunesId * 10 + 1}?i=${release.itunesId * 100 + n}`,
+});
+
+/** A short silent WAV so Chromium can actually start the media element. */
+function silentWav(): Buffer {
+  const sampleRate = 8000;
+  const samples = 1600;
+  const buffer = Buffer.alloc(44 + samples);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + samples, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate, 28);
+  buffer.writeUInt16LE(1, 32);
+  buffer.writeUInt16LE(8, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(samples, 40);
+  buffer.fill(128, 44);
+  return buffer;
+}
+
 export interface MockCatalogOptions {
   /**
    * Adjust one iTunes /search request before it is answered: delay it (to force
@@ -205,6 +247,8 @@ export interface MockCatalogOptions {
   ) => { delayMs?: number; fail?: boolean; status?: number } | void;
   /** Also answer iTunes enrichment/album lookups for the anchors' related artists. */
   enrichRelatedArtists?: boolean;
+  /** Serve the song fixtures' preview host so card samples can really play. */
+  playAudio?: boolean;
 }
 
 /**
@@ -263,6 +307,21 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
     });
   });
 
+  if (options.playAudio) {
+    const wav = silentWav();
+    await page.route('https://audio.example.test/**', (route) =>
+      route.fulfill({
+        status: 200,
+        headers: {
+          'content-type': 'audio/wav',
+          'content-length': String(wav.length),
+          'accept-ranges': 'bytes',
+        },
+        body: wav,
+      }),
+    );
+  }
+
   // Registered last so it answers related-artist requests first; everything
   // else falls through to the routes above.
   if (options.enrichRelatedArtists) {
@@ -287,6 +346,12 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       );
       if (url.pathname === '/lookup' && url.searchParams.get('entity') === 'album' && album) {
         await json({ resultCount: 1, results: [relatedAlbumResult(album[0], album[1])] });
+        return;
+      }
+
+      if (url.pathname === '/lookup' && url.searchParams.get('entity') === 'song' && album) {
+        const results = [1, 2, 3, 4].map((n) => relatedSongResult(album[0], album[1], n));
+        await json({ resultCount: results.length, results });
         return;
       }
 

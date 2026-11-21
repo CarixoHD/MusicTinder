@@ -4,27 +4,9 @@
   gap: var(--space-4);
 }
 
-/* Refill failed while cards are still in hand: a quiet inline flag, so the
-   deck keeps dealing instead of blaming the seeds. */
-.deck__notice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  margin: 0;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
-  border: 1px solid var(--border-hairline);
-  border-radius: var(--radius-control);
-  background: var(--bg-subtle);
-  color: var(--danger);
-  font-size: var(--text-meta-size);
-  line-height: var(--text-meta-line);
-  font-weight: var(--text-meta-weight);
-}
-
 /* The inline retry takes a row of its own: give the card that much less
    height so the like/skip buttons stay clear of the tab bar. */
-.deck:has(> .deck__notice) .deck__stack {
+.deck:has(> .deck-notice) .deck__stack {
   max-width: min(100%, max(220px, calc(100svh - 444px)));
 }
 
@@ -51,6 +33,38 @@
   justify-content: center;
   gap: var(--space-7);
   padding-top: var(--space-2);
+}
+
+/* Inline failure state (story 15): one quiet row above the deck, never an overlay. */
+.deck-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-4);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line);
+}
+
+.deck-notice .button--secondary {
+  background: var(--bg-elevated);
+}
+
+.deck-notice__text {
+  margin: 0;
+}
+
+/* Without a card in hand the notice is the screen's whole content. */
+.deck-notice--screen {
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  border: 0;
+  background: none;
 }
 
 .deck-action {

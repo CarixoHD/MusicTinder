@@ -49,7 +49,15 @@ const RELATED: readonly RelatedSeed[] = [
 
 const creatorKey = (name: string) => name.trim().toLowerCase();
 
-const anchorOf = (itunesArtistId: number) => ANCHORS.find((a) => a.itunesId === itunesArtistId);
+/** Related artists need a stable iTunes id so album/song decks can be dealt. */
+const relatedItunesId = (deezerId: number) => deezerId + 2000;
+
+const performerOf = (itunesArtistId: number): { name: string; chips: Chip[] } | undefined => {
+  const anchor = ANCHORS.find((a) => a.itunesId === itunesArtistId);
+  if (anchor) return anchor;
+  const related = RELATED.find((r) => relatedItunesId(r.deezerId) === itunesArtistId);
+  return related && { name: related.name, chips: related.chips };
+};
 
 const relatedCards = (): Card[] =>
   RELATED.map((r) => {
@@ -115,11 +123,13 @@ export class FakeCatalog implements Catalog {
   async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
     const key = creatorKey(name);
     const anchor = ANCHORS.find((a) => creatorKey(a.name) === key);
-    return anchor ? { itunesArtistId: anchor.itunesId, chips: anchor.chips } : null;
+    if (anchor) return { itunesArtistId: anchor.itunesId, chips: anchor.chips };
+    const related = RELATED.find((r) => creatorKey(r.name) === key);
+    return related ? { itunesArtistId: relatedItunesId(related.deezerId), chips: related.chips } : null;
   }
 
   async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
-    const anchor = anchorOf(itunesArtistId);
+    const anchor = performerOf(itunesArtistId);
     if (!anchor) return [];
     const tracks = [1, 2, 3, 4].map((n): Card => ({
       key: `it:track:${itunesArtistId}${n}`,
@@ -139,7 +149,7 @@ export class FakeCatalog implements Catalog {
   }
 
   async artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
-    const anchor = anchorOf(itunesArtistId);
+    const anchor = performerOf(itunesArtistId);
     if (!anchor) return [];
     const albums = [1, 2, 3].map((n): Card => ({
       key: `it:album:${itunesArtistId}${n}`,
@@ -150,10 +160,15 @@ export class FakeCatalog implements Catalog {
       creatorKey: creatorKey(anchor.name),
       year: 2018 + n,
       image: `https://cdn.example.test/albums/${itunesArtistId}${n}.jpg`,
-      previewUrl: n === 2 ? undefined : `https://audio.example.test/${itunesArtistId}${n}.m4a`,
       appleUrl: `https://music.apple.com/album/${itunesArtistId}${n}`,
       chips: anchor.chips,
     }));
     return albums.slice(0, limit);
+  }
+
+  /** Mirrors the live catalog: artist/album cards start silent, a sample resolves on demand. */
+  async samplePreview(card: Card): Promise<string | undefined> {
+    if (card.kind === 'song') return card.previewUrl;
+    return `https://audio.example.test/${card.key.replace(/:/g, '-')}.m4a`;
   }
 }

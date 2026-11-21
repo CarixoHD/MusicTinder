@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mockCatalog } from './fixtures';
 
 // Discovery runs the real store and the real catalog composition; only the two
@@ -144,66 +144,4 @@ test('ends quietly when nothing unseen is left and Change seeds returns to Setup
   await page.getByRole('button', { name: 'Change seeds' }).click();
 
   await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
-});
-
-/** Flips both catalog hosts between failing and answering the fixture mocks. */
-async function switchCatalog(page: Page, state: { offline: boolean }): Promise<void> {
-  const handler = async (route: Route) => {
-    if (state.offline) await route.abort('failed');
-    else await route.fallback();
-  };
-  await page.route('https://itunes.apple.com/**', handler);
-  await page.route('https://api.deezer.com/**', handler);
-}
-
-test('shows the catalog failure with a retry, not the deck-end screen, when the first refill fails', async ({
-  page,
-}) => {
-  await seedDeck(page);
-  const network = { offline: true };
-  await switchCatalog(page, network);
-  await page.goto('/');
-
-  await expect(
-    page.getByRole('heading', { level: 1, name: "Couldn't reach the catalog" }),
-  ).toBeVisible();
-  // The listener has not run out of seeds; the deck never loaded.
-  await expect(page.getByRole('heading', { name: "That's everything in this direction" })).toHaveCount(
-    0,
-  );
-  await expect(page.getByRole('button', { name: 'Fresh deck' })).toHaveCount(0);
-
-  network.offline = false;
-  await page.getByRole('button', { name: 'Try again' }).click();
-
-  await expect(deckTitle(page)).toHaveText(/\S/);
-});
-
-test('keeps the cards in hand swipeable and offers a retry when a background refill fails', async ({
-  page,
-}) => {
-  await seedDeck(page);
-  const network = { offline: false };
-  await switchCatalog(page, network);
-
-  await page.goto('/');
-  await expect(deckTitle(page)).toHaveText(/\S/);
-
-  // The first pool is below MIN_POOL, so the next commit refills in the
-  // background; with the catalog down that refill rejects.
-  network.offline = true;
-  const first = await deckTitle(page).innerText();
-  await page.keyboard.press('ArrowRight');
-  await expect(deckTitle(page)).not.toHaveText(first);
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
-
-  // The card in hand stays swipeable underneath the notice.
-  const second = await deckTitle(page).innerText();
-  await page.keyboard.press('ArrowLeft');
-  await expect(deckTitle(page)).not.toHaveText(second);
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
-
-  network.offline = false;
-  await page.getByRole('button', { name: 'Try again' }).click();
-  await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
 });

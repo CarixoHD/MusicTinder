@@ -147,6 +147,7 @@ const failingCatalog = (): Catalog => {
     enrichArtist: fail,
     artistTopTracks: fail,
     artistAlbums: fail,
+    samplePreview: fail,
   };
 };
 
