@@ -112,6 +112,34 @@ test('a refill failure after the first deal keeps dealt cards swipeable with an 
   await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
 });
 
+test('a first refill failure explains itself inline and Retry deals once the catalog is back', async ({
+  page,
+}) => {
+  await mockCatalog(page, { enrichRelatedArtists: true });
+  await seedDeck(page);
+
+  let catalogDown = true;
+  await page.route('**/*', (route) => {
+    const host = new URL(route.request().url()).host;
+    if (catalogDown && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
+      return route.abort('failed');
+    }
+    return route.fallback();
+  });
+
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { name: "Couldn't reach the catalog" })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your deck is getting ready' })).toHaveCount(0);
+  await expect(page.locator('.deck__current')).toHaveCount(0);
+
+  catalogDown = false;
+  await page.getByRole('button', { name: 'Retry' }).click();
+
+  await expect(deckTitle(page)).toHaveText(/\S/);
+  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+});
+
 test('going back online retries the refill without a tap', async ({ page }) => {
   await mockCatalog(page, { enrichRelatedArtists: true });
   await seedDeck(page);
