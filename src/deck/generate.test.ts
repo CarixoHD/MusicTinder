@@ -136,6 +136,14 @@ class FailingEnrichmentCatalog extends DeeperCatalog {
   }
 }
 
+/** One artist is unreachable, the rest cool down: the outage is the real cause. */
+class MixedFailureCatalog extends DeeperCatalog {
+  override async enrichArtist(name: string): Promise<never> {
+    if (name.trim().toLowerCase() === 'glass harbour') throw new CatalogError('network', 'offline');
+    throw new CatalogError('rate', 'iTunes is cooling down');
+  }
+}
+
 /** Every enrichment cools down: a transient budget failure, not "nothing there". */
 class CoolingCatalog extends DeeperCatalog {
   override async enrichArtist(): Promise<never> {
@@ -285,6 +293,12 @@ describe('generateCandidates', () => {
       ).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
     },
   );
+
+  it('reports the outage, not a later cool-down, when both leave nothing to deal', async () => {
+    await expect(
+      generateCandidates(new MixedFailureCatalog(), ARTIST_SEEDS, 'album', new Set()),
+    ).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
+  });
 
   it('treats a catalog answer of "nothing there" as an empty deck, not an outage', async () => {
     const cards = await generateCandidates(new NotFoundCatalog(), ARTIST_SEEDS, 'artist', new Set());
