@@ -3,7 +3,6 @@ import { test, expect } from "./journey";
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
 
 test("a fresh Songs deck deals a card when the first related artist is unknown to iTunes", async ({ page }) => {
-  test.setTimeout(60_000);
   const stamp = Date.now() % 1000000;
   const seedName = `Seed${stamp}`;
   const seedDeezerId = 91000000 + (stamp % 1000);
@@ -51,12 +50,17 @@ test("a fresh Songs deck deals a card when the first related artist is unknown t
     }
     await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ resultCount: results.length, results }) });
   });
+  // Hold the related list until the iTunes allowance has been spent, so the
+  // deck starts its first refill in the cool-down a long session lands in.
+  let releaseRelated!: () => void;
+  const heldRelated = new Promise<void>((resolve) => { releaseRelated = resolve; });
   await page.route(/api\.deezer\.com/, async (route) => {
     const u = new URL(route.request().url());
     const cb = u.searchParams.get("callback");
     const related = u.pathname.match(/artist\/(\d+)\/related/);
     let data: object = { data: [] };
     if (related && Number(related[1]) === seedDeezerId) {
+      await heldRelated;
       data = {
         data: [
           { id: ++id, name: GHOST, nb_fan: 1200 },
@@ -68,6 +72,18 @@ test("a fresh Songs deck deals a card when the first related artist is unknown t
   });
 
   await page.goto("/");
+
+  // Spend the shared iTunes allowance as a long session would, leaving a token
+  // or two: non-waiting lookups from here on fail with 'budget', like a real
+  // cool-down; only a lookup the deck holds for can still get through.
+  await page.evaluate(async (spend) => {
+    const url = "/src/catalog/budget.ts";
+    const budget = await import(/* @vite-ignore */ url);
+    await Promise.all(
+      Array.from({ length: spend }, () => budget.withItunesBudget(null, async () => null)),
+    );
+  }, 15);
+  releaseRelated();
 
   const card = page.locator("article").first();
   await expect(card.getByRole("heading", { level: 2 })).toHaveText(/^Dealt song \d+$/, { timeout: 20_000 });
