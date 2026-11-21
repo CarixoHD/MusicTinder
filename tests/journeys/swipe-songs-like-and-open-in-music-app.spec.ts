@@ -85,20 +85,20 @@ test("listener seeds an artist, swipes songs by button, key and drag, plays a sa
   await page.getByRole("button", { name: "Liked" }).click();
   await expect(page.getByRole("heading", { name: "Liked", level: 1 })).toBeVisible();
   for (const t of [first, second, third]) {
-    await expect(page.getByRole("link", { name: new RegExp(`^${t} `) })).toHaveAttribute("href", new RegExp(`^https://open\\.spotify\\.com/search/${t}`));
+    await expect(page.getByRole("link", { name: new RegExp(`^${t}, `) })).toHaveAttribute("href", new RegExp(`^https://open\\.spotify\\.com/search/${t}`));
   }
-  await expect(page.getByRole("link", { name: new RegExp(`^${skipped} `) })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: new RegExp(`^${skipped}, `) })).toHaveCount(0);
 
   // switch music app
   await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Apple Music" }).click();
   await page.getByRole("button", { name: "Close settings" }).click();
-  await expect(page.getByRole("link", { name: new RegExp(`^${first} `) })).toHaveAttribute("href", /^https:\/\/music\.apple\.com\//);
+  await expect(page.getByRole("link", { name: new RegExp(`^${first}, `) })).toHaveAttribute("href", /^https:\/\/music\.apple\.com\//);
 
   // survives reload
   await page.reload();
   await page.getByRole("button", { name: "Liked" }).click();
   for (const t of [first, second, third]) {
-    await expect(page.getByRole("link", { name: new RegExp(`^${t} .*Open in Apple Music`) })).toBeVisible();
+    await expect(page.getByRole("link", { name: new RegExp(`^${t}, .*open in Apple Music`) })).toBeVisible();
   }
 });

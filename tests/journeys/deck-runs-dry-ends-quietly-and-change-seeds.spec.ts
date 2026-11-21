@@ -41,7 +41,7 @@ test("when a small catalog runs dry the deck ends quietly without repeats, and C
 
   const title = page.locator("article").first().getByRole("heading", { level: 2 });
   await expect(title).toHaveText(/^Song \d+$/);
-  const end = page.getByRole("heading", { name: "That's everything in this direction" });
+  const end = page.getByRole("heading", { name: "That’s everything in this direction" });
   const current = async () => ((await title.count()) === 0 ? null : await title.innerText());
   const seen = new Set<string>();
   for (let i = 0; i < 20 && !(await end.isVisible()); i++) {
@@ -55,7 +55,7 @@ test("when a small catalog runs dry the deck ends quietly without repeats, and C
   }
   await expect(end).toBeVisible();
   expect(seen.size).toBeGreaterThan(2);
-  await expect(page.getByText("Couldn't reach the catalog")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Fresh deck" })).toBeVisible();
 
   await page.getByRole("button", { name: "Change seeds" }).click();

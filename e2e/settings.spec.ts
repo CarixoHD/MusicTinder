@@ -73,10 +73,7 @@ const storedState = (page: Page): Promise<Record<string, unknown> | null> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? 'null')?.state ?? null);
 
 const openSettings = async (page: Page) => {
-  await page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('button', { name: 'Settings', exact: true })
-    .click();
+  await page.getByRole('button', { name: 'Open settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -150,6 +147,52 @@ test('music app and sound choices persist and show in the reopened settings', as
     'aria-checked',
     'false',
   );
+});
+
+test('the sound switch shows its value in the track, not only in the label', async ({ page }) => {
+  await page.goto('/');
+  const dialog = await openSettings(page);
+  const track = dialog.locator('.switch__track');
+
+  await expect
+    .poll(() => track.evaluate((el) => getComputedStyle(el).backgroundColor))
+    .toBe('rgb(139, 143, 240)');
+
+  await dialog.getByRole('switch', { name: 'Sound is on' }).click();
+  await expect(dialog.getByRole('switch', { name: 'Sound is off' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
+  // Off: a neutral hairline track with the thumb back at the start.
+  await expect
+    .poll(() => track.evaluate((el) => getComputedStyle(el).backgroundColor))
+    .toBe('rgba(0, 0, 0, 0)');
+  await expect
+    .poll(() => track.evaluate((el) => getComputedStyle(el).borderTopColor))
+    .toBe('rgba(255, 255, 255, 0.08)');
+  await expect
+    .poll(() =>
+      dialog.locator('.switch__thumb').evaluate((el) => getComputedStyle(el).transform),
+    )
+    .toBe('none');
+});
+
+test('Edit seeds in Settings returns to Setup with the current seeds kept', async ({ page }) => {
+  await page.addInitScript((profile) => {
+    try {
+      localStorage.setItem('mt:v1', profile);
+    } catch {
+      // about:blank has no storage; the script runs again on navigation.
+    }
+  }, JSON.stringify(SEEDED));
+  await page.goto('/');
+  const dialog = await openSettings(page);
+
+  await dialog.getByRole('button', { name: 'Edit seeds' }).click();
+
+  await expect(page.getByRole('dialog')).toBeHidden();
+  await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Remove Ada Vale' })).toBeVisible();
 });
 
 test('turning Sound off stops the sample that is playing', async ({ page }) => {
@@ -236,11 +279,9 @@ test('Escape and a backdrop tap close the sheet and return focus to its opener',
   page,
 }) => {
   await page.goto('/');
-  const settingsTab = page
-    .getByRole('navigation', { name: 'Main' })
-    .getByRole('button', { name: 'Settings', exact: true });
+  const settingsButton = page.getByRole('button', { name: 'Open settings' });
 
-  await settingsTab.click();
+  await settingsButton.click();
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
   expect(
     await page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null),
@@ -248,13 +289,13 @@ test('Escape and a backdrop tap close the sheet and return focus to its opener',
 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(settingsTab).toBeFocused();
+  await expect(settingsButton).toBeFocused();
 
-  await settingsTab.click();
+  await settingsButton.click();
   await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
   await page.locator('.sheet-backdrop').click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('dialog')).toBeHidden();
-  await expect(settingsTab).toBeFocused();
+  await expect(settingsButton).toBeFocused();
 });
 
 test('the open sheet meets WCAG AA colour contrast in dark and light', async ({ page }) => {

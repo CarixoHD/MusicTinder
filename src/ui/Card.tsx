@@ -3,8 +3,23 @@ import { chipLabel } from '../chips';
 import type { Card as CardModel } from '../types';
 import { ArtworkPlaceholder } from './icons';
 
-/** Recommendation card: artwork, facts, and the sample control in the play slot. */
+const KIND_LABEL: Record<CardModel['kind'], string> = {
+  artist: 'Artist',
+  album: 'Album',
+  song: 'Song',
+};
+
+/** Long titles need the smaller step and the second line; short ones stay display. */
+const LONG_TITLE = 18;
+
+/** Recommendation card: a surface, artwork, facts, and the sample control. */
 export function Card({ card }: { card: CardModel }) {
+  // An artist's name is already the title; the second line carries what it is.
+  const secondary =
+    card.kind === 'artist'
+      ? [KIND_LABEL.artist, card.chips[0] && chipLabel(card.chips[0])].filter(Boolean).join(' · ')
+      : card.creator;
+
   return (
     <article className="card">
       <div className="card__art">
@@ -20,8 +35,10 @@ export function Card({ card }: { card: CardModel }) {
         </div>
       </div>
 
-      <h2 className="card__title">{card.title}</h2>
-      <p className="card__creator">{card.creator}</p>
+      <h2 className={`card__title${card.title.length > LONG_TITLE ? ' card__title--long' : ''}`}>
+        {card.title}
+      </h2>
+      <p className="card__creator">{secondary}</p>
 
       <div className="card__meta">
         {card.year !== undefined && <span className="card__year">{card.year}</span>}

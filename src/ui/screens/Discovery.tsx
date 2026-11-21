@@ -8,7 +8,9 @@ import type { Card as CardModel, CardKind, Catalog, Seed, TasteWeights } from '.
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { DeckNotice } from '../components/DeckNotice';
+import { EmptyState } from '../components/EmptyState';
 import { SwipeCard } from '../components/SwipeCard';
+import { DiscoverIcon } from '../icons';
 import { withTransition } from '../transition';
 import './discovery.css';
 
@@ -274,51 +276,70 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   }, [react, settingsOpen]);
 
   const current = state.pool[0];
+  const upcoming = deck.prefetchQueue(state);
+  const next = upcoming[0];
+  const seedNames = seeds.map((seed) => seed.name);
+  const seedSummary = seedNames.slice(0, 2).join(', ');
+  const moreSeeds = seedNames.length > 2 ? ` +${seedNames.length - 2}` : '';
 
   if (!current) {
+    // No seeds is not "nothing to recommend": the deck was never given a start.
+    if (seeds.length === 0) {
+      return (
+        <EmptyState
+          icon={<DiscoverIcon width={32} height={32} />}
+          title="Pick a few seeds to start"
+          body="Choose a few artists, albums or genres and the deck starts there."
+        >
+          <Button variant="secondary" onClick={() => withTransition(() => setScreen('setup'))}>
+            Go to setup
+          </Button>
+        </EmptyState>
+      );
+    }
+
     if (state.status === 'stalled' || state.emptyReason === 'no-candidates') {
       return (
-        <section className="screen screen--empty" aria-labelledby="discovery-title">
-          <DeckNotice
-            status={state.status}
-            emptyReason={state.emptyReason}
-            hasCards={false}
-            onRetry={freshDeck}
-            onChangeSeeds={() => withTransition(() => setScreen('setup'))}
-          />
-        </section>
+        <DeckNotice
+          status={state.status}
+          emptyReason={state.emptyReason}
+          hasCards={false}
+          onRetry={freshDeck}
+          onChangeSeeds={() => withTransition(() => setScreen('setup'))}
+        />
       );
     }
 
     // A refill in flight (the deck is still 'dealing') is not the deck's end.
     if (loading || state.status === 'dealing') {
       return (
-        <section className="screen screen--empty" aria-labelledby="discovery-loading-title">
-          <h1 id="discovery-loading-title" className="screen__title">
+        <section className="screen screen--empty deck-loading" aria-labelledby="discovery-loading-title">
+          <div className="deck-loading__skeleton" aria-hidden="true">
+            <span className="deck-loading__art" />
+            <span className="deck-loading__bar deck-loading__bar--wide" />
+            <span className="deck-loading__bar" />
+          </div>
+          <h1 id="discovery-loading-title" className="deck-loading__copy">
             Your deck is getting ready
           </h1>
-          <p className="screen__body">Finding artists near your seeds.</p>
+          <p className="deck-loading__hint">Finding artists near your seeds.</p>
         </section>
       );
     }
 
     return (
-      <section className="screen screen--empty" aria-labelledby="discovery-end-title">
-        <h1 id="discovery-end-title" className="screen__title">
-          That&apos;s everything in this direction
-        </h1>
-        <p className="screen__body">
-          Nothing left here clears the bar. Try again, or widen what you started from.
-        </p>
-        <div className="screen__actions">
-          <Button variant="primary" onClick={freshDeck}>
-            Fresh deck
-          </Button>
-          <Button variant="secondary" onClick={() => withTransition(() => setScreen('setup'))}>
-            Change seeds
-          </Button>
-        </div>
-      </section>
+      <EmptyState
+        icon={<DiscoverIcon width={32} height={32} />}
+        title="That’s everything in this direction"
+        body="Nothing left here clears the bar. Try again, or widen what you started from."
+      >
+        <Button variant="primary" onClick={freshDeck}>
+          Fresh deck
+        </Button>
+        <Button variant="secondary" onClick={() => withTransition(() => setScreen('setup'))}>
+          Change seeds
+        </Button>
+      </EmptyState>
     );
   }
 
@@ -340,10 +361,19 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
         <div className="deck__current">
           <SwipeCard key={current.key} card={withSample(current)} onCommit={react} />
         </div>
-        {/* Kept in the DOM (not shown) so the next cards' artwork and text are
-            already loaded when a swipe promotes them. */}
+        {/* The next card waits visibly behind the top one, so a swipe has a
+            destination and the deck reads as a stack. It is first in paint
+            order but after the current card in the DOM, so the current card is
+            the first article and the duplicate stays out of the a11y tree. */}
+        {next && (
+          <div className="deck__behind" aria-hidden="true">
+            <Card card={withSample(next)} />
+          </div>
+        )}
+        {/* Remaining prefetch cards are in the DOM but unseen: their artwork and
+            text are decoded before a swipe promotes them. */}
         <div className="deck__upcoming" aria-hidden="true">
-          {deck.prefetchQueue(state).map((card) => (
+          {upcoming.map((card) => (
             <Card key={card.key} card={withSample(card)} />
           ))}
         </div>
@@ -368,6 +398,16 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
         </button>
       </div>
 
+      {seedNames.length > 0 && (
+        <button
+          type="button"
+          className="deck__seeds"
+          onClick={() => withTransition(() => setScreen('setup'))}
+        >
+          Seeds: {seedSummary}
+          {moreSeeds} · Edit
+        </button>
+      )}
     </section>
   );
 }

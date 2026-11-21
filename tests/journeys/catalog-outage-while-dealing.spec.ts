@@ -25,7 +25,7 @@ const SEED_STATE = JSON.stringify({
   version: 1,
 });
 
-test("when the catalog is down as the deck deals, the listener sees 'Couldn't reach the catalog' with Retry, not a fake end of deck", async ({ page }) => {
+test("when the catalog is down as the deck deals, the listener sees 'Couldn’t reach the catalog' with Retry, not a fake end of deck", async ({ page }) => {
   const stamp = Date.now();
   let down = false;
   await page.route(/itunes\.apple\.com/, async (route) => {
@@ -41,9 +41,9 @@ test("when the catalog is down as the deck deals, the listener sees 'Couldn't re
   down = true;
   await page.getByRole("button", { name: "Start discovering" }).click();
 
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
-  await expect(page.getByText("That's everything in this direction")).toHaveCount(0);
+  await expect(page.getByText("That’s everything in this direction")).toHaveCount(0);
 });
 
 test("a mid-session outage that drains the dealt cards offers Retry instead of a fake end of deck", async ({ page }) => {
@@ -87,7 +87,7 @@ test("a mid-session outage that drains the dealt cards offers Retry instead of a
 
   // Running out of dealt cards while offline is a catalog failure, not the end
   // of the deck — not even for the moment the failed refill takes to answer.
-  await expect(page.getByText("That's everything in this direction")).toHaveCount(0);
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("That’s everything in this direction")).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
 });

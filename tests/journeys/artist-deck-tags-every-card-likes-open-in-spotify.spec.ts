@@ -55,5 +55,5 @@ test("in dark mode, every artist card shows a genre tag; liked artists open in S
     await expect(row).toBeVisible();
     await expect(row).toHaveAttribute("href", new RegExp(`^https://open\\.spotify\\.com/.*${t}`));
   }
-  await expect(page.getByRole("link", { name: /Open in/ })).toHaveCount(liked.length);
+  await expect(page.getByRole("link", { name: /open in/ })).toHaveCount(liked.length);
 });

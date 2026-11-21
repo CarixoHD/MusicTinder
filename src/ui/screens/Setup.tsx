@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { CHIPS, chipLabel } from '../../chips';
 import { useStore } from '../../store/store';
 import type { CardKind, Chip } from '../../types';
@@ -14,6 +15,11 @@ const CARD_TYPES: readonly { id: CardKind; label: string }[] = [
   { id: 'song', label: 'Songs' },
 ];
 
+const SEARCH_SCOPES: readonly { id: 'artist' | 'album'; label: string }[] = [
+  { id: 'artist', label: 'Artists' },
+  { id: 'album', label: 'Albums' },
+];
+
 const genreSeedId = (chip: Chip) => `genre:${chip}`;
 
 export default function Setup() {
@@ -23,6 +29,9 @@ export default function Setup() {
   const cardType = useStore((state) => state.settings.cardType);
   const setSettings = useStore((state) => state.setSettings);
   const setScreen = useStore((state) => state.setScreen);
+  // Searching and what the deck deals are separate decisions: the scope only
+  // picks which catalog the field searches.
+  const [searchScope, setSearchScope] = useState<'artist' | 'album'>('artist');
 
   const isChipSelected = (chip: Chip) =>
     seeds.some((seed) => seed.id === genreSeedId(chip));
@@ -35,12 +44,16 @@ export default function Setup() {
     addSeed({ id: genreSeedId(chip), kind: 'genre', name: chipLabel(chip), chips: [chip] });
   };
 
+  // Genre chips are their own selection UI; the pills show the searched seeds.
   const chosenSeeds = seeds.filter((seed) => seed.kind !== 'genre');
-  // Songs are found from artists, so the picker searches artists for that mood.
-  const searchType = cardType === 'album' ? 'album' : 'artist';
+  const seedCount = seeds.length;
+  const startLabel =
+    seedCount === 0
+      ? 'Start discovering'
+      : `Start discovering with ${seedCount} seed${seedCount === 1 ? '' : 's'}`;
 
   return (
-    <section className="screen" aria-labelledby="setup-title">
+    <section className="screen screen--setup" aria-labelledby="setup-title">
       <div className="screen__intro">
         <h1 id="setup-title" className="screen__title">
           Find something new
@@ -52,28 +65,44 @@ export default function Setup() {
 
       <section className="setup__section" aria-labelledby="setup-search-label">
         <h2 id="setup-search-label" className="setup__label">
-          {cardType === 'album' ? 'Add an album' : 'Add an artist'}
+          Add a seed
         </h2>
-        <SeedSearch type={searchType} />
-      </section>
-
-      <section className="setup__section" aria-labelledby="setup-type-label">
-        <h2 id="setup-type-label" className="setup__label">
-          Show me
-        </h2>
-        <div className="segmented" role="group" aria-labelledby="setup-type-label">
-          {CARD_TYPES.map((type) => (
-            <button
-              key={type.id}
-              type="button"
-              className="segmented__button"
-              aria-pressed={cardType === type.id}
-              onClick={() => setSettings({ cardType: type.id })}
-            >
-              {type.label}
-            </button>
+        <div className="segmented" role="radiogroup" aria-label="Search scope">
+          {SEARCH_SCOPES.map((scope) => (
+            <label key={scope.id} className="segmented__option">
+              <input
+                type="radio"
+                name="seed-scope"
+                value={scope.id}
+                checked={searchScope === scope.id}
+                onChange={() => setSearchScope(scope.id)}
+              />
+              <span>{scope.label}</span>
+            </label>
           ))}
         </div>
+        <SeedSearch type={searchScope} />
+
+        {chosenSeeds.length > 0 && (
+          <ul className="seed-pills" aria-label="Your seeds">
+            {chosenSeeds.map((seed) => (
+              <li key={seed.id} className="seed-pill">
+                <span className="seed-pill__thumb" aria-hidden="true">
+                  <ArtworkPlaceholder width={24} height={24} />
+                </span>
+                <span className="seed-pill__name">{seed.name}</span>
+                <button
+                  type="button"
+                  className="seed-pill__remove"
+                  aria-label={`Remove ${seed.name}`}
+                  onClick={() => removeSeed(seed.id)}
+                >
+                  <CloseIcon width={16} height={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="setup__section" aria-labelledby="setup-genres-label">
@@ -92,42 +121,33 @@ export default function Setup() {
         </div>
       </section>
 
-      {chosenSeeds.length > 0 && (
-        <section className="setup__section" aria-labelledby="setup-seeds-label">
-          <h2 id="setup-seeds-label" className="setup__label">
-            Your seeds
-          </h2>
-          <ul className="seed-list">
-            {chosenSeeds.map((seed) => (
-              <li key={seed.id} className="seed-row">
-                <span className="seed-row__thumb" aria-hidden="true">
-                  <ArtworkPlaceholder width={22} height={22} />
-                </span>
-                <span className="seed-row__text">
-                  <span className="seed-row__name">{seed.name}</span>
-                  <span className="seed-row__meta">{seed.kind === 'artist' ? 'Artist' : 'Album'}</span>
-                </span>
-                <button
-                  type="button"
-                  className="icon-button"
-                  aria-label={`Remove ${seed.name}`}
-                  onClick={() => removeSeed(seed.id)}
-                >
-                  <CloseIcon />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <section className="setup__section" aria-labelledby="setup-type-label">
+        <h2 id="setup-type-label" className="setup__label">
+          Deal me
+        </h2>
+        <div className="segmented" role="group" aria-labelledby="setup-type-label">
+          {CARD_TYPES.map((type) => (
+            <button
+              key={type.id}
+              type="button"
+              className="segmented__button"
+              aria-pressed={cardType === type.id}
+              onClick={() => setSettings({ cardType: type.id })}
+            >
+              {type.label}
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <div className="screen__actions">
+      <div className="setup__footer">
         <Button
           variant="primary"
-          disabled={seeds.length === 0}
+          className="setup__start"
+          disabled={seedCount === 0}
           onClick={() => setScreen('discovery')}
         >
-          Start discovering
+          {startLabel}
         </Button>
       </div>
     </section>

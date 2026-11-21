@@ -10,6 +10,31 @@ const storedSeeds = (page: Page): Promise<unknown> =>
 const storedCardType = (page: Page): Promise<unknown> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? '{}').state?.settings?.cardType);
 
+test('a picked seed lands as a pill under the field and Start stays in view', async ({ page }) => {
+  await mockCatalog(page);
+  await page.goto('/');
+
+  const input = page.getByRole('searchbox', { name: 'Search artists' });
+  await input.fill('ada');
+  await page.getByRole('button', { name: /Ada Vale/ }).click();
+
+  // Feedback is where the eye is: the box clears, the list closes, the pill appears.
+  await expect(input).toHaveValue('');
+  await expect(page.getByRole('list', { name: 'Search results' })).toHaveCount(0);
+  const pill = page.getByRole('button', { name: 'Remove Ada Vale' });
+  await expect(pill).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Your seeds' })).toContainText('Ada Vale');
+
+  const inputBox = (await input.boundingBox())!;
+  const pillBox = (await pill.boundingBox())!;
+  expect(pillBox.y).toBeGreaterThan(inputBox.y);
+  expect(pillBox.y).toBeLessThan(inputBox.y + inputBox.height + 80);
+
+  const start = page.getByRole('button', { name: 'Start discovering' });
+  await expect(start).toHaveText('Start discovering with 1 seed');
+  await expect(start).toBeInViewport();
+});
+
 test('typing shows matching artists and picking one stores its iTunes id', async ({ page }) => {
   await mockCatalog(page);
   await page.goto('/');
@@ -30,7 +55,7 @@ test('the album picker stores an album seed with its collection id', async ({ pa
   await mockCatalog(page);
   await page.goto('/');
 
-  await page.getByRole('button', { name: 'Albums' }).click();
+  await page.getByRole('radiogroup', { name: 'Search scope' }).getByRole('radio', { name: 'Albums' }).check();
   const input = page.getByRole('searchbox', { name: 'Search albums' });
   await input.fill('ada');
 
@@ -84,11 +109,11 @@ test('a failed search explains itself inline and Retry runs it again', async ({ 
 
   await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
 
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
   await page.getByRole('button', { name: 'Retry' }).click();
 
   await expect(page.getByRole('button', { name: /Ada Vale/ })).toBeVisible();
-  await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeHidden();
 });
 
 test('a rate-limited search says Apple is limiting searches, and Retry runs it again', async ({
@@ -163,6 +188,7 @@ test('Start discovering waits for a seed, opens Discovery and the setup survives
 
   await page.getByRole('button', { name: 'Albums' }).click();
   await page.getByRole('button', { name: 'Pop', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Search scope' }).getByRole('radio', { name: 'Albums' }).check();
   await page.getByRole('searchbox', { name: 'Search albums' }).fill('north');
   await page.getByRole('button', { name: /North Static No\. 1/ }).click();
 
@@ -177,7 +203,7 @@ test('Start discovering waits for a seed, opens Discovery and the setup survives
   await expect(page.getByRole('button', { name: 'Albums' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Pop', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Remove North Static No. 1' })).toBeVisible();
-  await expect(page.getByRole('searchbox', { name: 'Search albums' })).toBeVisible();
+  await expect(page.getByRole('searchbox')).toBeVisible();
 });
 
 test('every setup control is at least 44 px tall and reachable by keyboard with a focus ring', async ({
@@ -194,14 +220,19 @@ test('every setup control is at least 44 px tall and reachable by keyboard with 
       return { style: style.outlineStyle, width: style.outlineWidth };
     });
 
-  // Tab from the untouched page: header settings, then the seed search.
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('searchbox', { name: 'Search artists' })).toBeFocused();
+  // Tab from the untouched page: header settings, the search scope, the field.
+  const search = page.getByRole('searchbox', { name: 'Search artists' });
+  for (let step = 0; step < 10 && !(await search.evaluate((el) => el === document.activeElement)); step += 1) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(search).toBeFocused();
   expect((await ring())?.style).toBe('solid');
 
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Artists' })).toBeFocused();
+  const dealArtists = page.getByRole('button', { name: 'Artists' });
+  for (let step = 0; step < 60 && !(await dealArtists.evaluate((el) => el === document.activeElement)); step += 1) {
+    await page.keyboard.press('Tab');
+  }
+  await expect(dealArtists).toBeFocused();
   const buttonRing = await ring();
   expect(buttonRing?.style).toBe('solid');
   expect(Number.parseFloat(buttonRing?.width ?? '0')).toBeGreaterThanOrEqual(2);

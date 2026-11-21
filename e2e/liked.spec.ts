@@ -86,7 +86,7 @@ test('likes list newest first with title, creator and a fixed 56 px thumb', asyn
 
   await expect(page.getByRole('heading', { level: 1, name: 'Liked' })).toBeVisible();
 
-  const rows = page.locator('.liked-row');
+  const rows = page.locator('.liked-row-item');
   await expect(rows).toHaveCount(newestFirst.length);
   await expect(page.locator('.liked-row__title')).toHaveText(newestFirst.map((item) => item.title));
 
@@ -97,6 +97,16 @@ test('likes list newest first with title, creator and a fixed 56 px thumb', asyn
     const box = await thumb.boundingBox();
     expect(box).toMatchObject({ width: 56, height: 56 });
   }
+
+  // An artist row says what it is instead of repeating the name; both rows
+  // carry type + genre as the secondary line.
+  await expect(rows.nth(0).locator('.liked-row__creator')).toHaveText('Artist · Electronic');
+  await expect(rows.nth(1).locator('.liked-row__creator')).toHaveText('Album · Electronic');
+  // One accessible name, not the title repeated by every inner text node.
+  await expect(rows.nth(0).locator('.liked-row')).toHaveAttribute(
+    'aria-label',
+    'Neon Field, Artist · Electronic, open in Spotify',
+  );
 
   // The snapshot without artwork shows the neutral placeholder, not an empty box.
   await expect(rows.nth(2).locator('.liked-row__thumb svg')).toBeVisible();

@@ -39,5 +39,5 @@ test("peeking at Liked and coming back keeps the card the listener was judging, 
     await page.getByRole("button", { name: "Discover", exact: true }).click();
     await expect(title).toHaveText(current);
   }
-  await expect(page.getByText("That's everything in this direction")).toHaveCount(0);
+  await expect(page.getByText("That’s everything in this direction")).toHaveCount(0);
 });

@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import type { EmptyReason } from '../../deck/deck';
 import type { DeckStatus } from '../../types';
 import { Button } from '../Button';
+import { CloudOffIcon, DiscoverIcon } from '../icons';
+import { EmptyState } from './EmptyState';
 
 interface DeckNoticeProps {
   status: DeckStatus;
@@ -35,7 +37,7 @@ export function DeckNotice({
     if (hasCards) {
       return (
         <div className="deck-notice" role="status">
-          <p className="deck-notice__text">Couldn&apos;t reach the catalog</p>
+          <p className="deck-notice__text">Couldn’t reach the catalog</p>
           <Button variant="secondary" onClick={onRetry}>
             Retry
           </Button>
@@ -44,35 +46,29 @@ export function DeckNotice({
     }
 
     return (
-      <div className="deck-notice deck-notice--screen" role="status">
-        <h1 id="discovery-title" className="screen__title">
-          Couldn&apos;t reach the catalog
-        </h1>
-        <p className="screen__body">Check your connection, then try again.</p>
-        <div className="screen__actions">
-          <Button variant="secondary" onClick={onRetry}>
-            Retry
-          </Button>
-        </div>
-      </div>
+      <EmptyState
+        icon={<CloudOffIcon width={32} height={32} />}
+        title="Couldn’t reach the catalog"
+        body="Check your connection, then try again."
+      >
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      </EmptyState>
     );
   }
 
   if (emptyReason !== 'no-candidates') return null;
 
   return (
-    <div className="deck-notice deck-notice--screen" role="status">
-      <h1 id="discovery-title" className="screen__title">
-        Nothing to recommend from these seeds yet
-      </h1>
-      <p className="screen__body">
-        Try a different artist, album or genre — the deck starts where you point it.
-      </p>
-      <div className="screen__actions">
-        <Button variant="secondary" onClick={onChangeSeeds}>
-          Change seeds
-        </Button>
-      </div>
-    </div>
+    <EmptyState
+      icon={<DiscoverIcon width={32} height={32} />}
+      title="Nothing to recommend from these seeds yet"
+      body="Try a different artist, album or genre — the deck starts where you point it."
+    >
+      <Button variant="secondary" onClick={onChangeSeeds}>
+        Change seeds
+      </Button>
+    </EmptyState>
   );
 }

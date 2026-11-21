@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { chipLabel } from '../../chips';
 import { buildLink, type MusicApp } from '../../links/links';
 import { useStore } from '../../store/store';
 import type { LikedItem } from '../../types';
 import { Button } from '../Button';
-import { ArtworkPlaceholder } from '../icons';
+import { EmptyState } from '../components/EmptyState';
+import { ArtworkPlaceholder, LikedIcon } from '../icons';
 import { withTransition } from '../transition';
 import './liked.css';
 
@@ -11,6 +13,12 @@ const APP_LABEL: Record<MusicApp, string> = {
   spotify: 'Spotify',
   apple: 'Apple Music',
   ytmusic: 'YouTube Music',
+};
+
+const KIND_LABEL: Record<LikedItem['kind'], string> = {
+  artist: 'Artist',
+  album: 'Album',
+  song: 'Song',
 };
 
 function ExternalLinkIcon() {
@@ -40,11 +48,7 @@ function Thumb({ item }: { item: LikedItem }) {
   return (
     <span className="liked-row__thumb">
       {item.image && !isBroken ? (
-        <img
-          src={item.image}
-          alt={`${item.title} — ${item.creator}`}
-          onError={() => setIsBroken(true)}
-        />
+        <img src={item.image} alt="" onError={() => setIsBroken(true)} />
       ) : (
         <ArtworkPlaceholder />
       )}
@@ -53,23 +57,33 @@ function Thumb({ item }: { item: LikedItem }) {
 }
 
 function LikedRow({ item, musicApp, index }: { item: LikedItem; musicApp: MusicApp; index: number }) {
+  // The artist name is the title, so repeat it once: as what it is plus its genre.
+  const secondary = [KIND_LABEL[item.kind], item.chips[0] && chipLabel(item.chips[0])]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <li className="liked-row-item" style={{ animationDelay: `${index * 30}ms` }}>
+      {/* The link is an empty overlay: its one accessible name never repeats the
+          visual text, and the whole row stays the tap target. */}
       <a
         className="liked-row"
         href={buildLink(item, musicApp)}
         target="_blank"
         rel="noopener"
-      >
+        aria-label={[item.title, secondary, item.year, `open in ${APP_LABEL[musicApp]}`]
+          .filter((part) => part !== undefined)
+          .join(', ')}
+      />
+      <span aria-hidden="true" className="liked-row__visual">
         <Thumb item={item} />
         <span className="liked-row__text">
           <span className="liked-row__title">{item.title}</span>
-          <span className="liked-row__creator">{item.creator}</span>
+          <span className="liked-row__creator">{secondary}</span>
         </span>
         {item.year !== undefined && <span className="liked-row__year">{item.year}</span>}
         <ExternalLinkIcon />
-        <span className="sr-only">Open in {APP_LABEL[musicApp]}</span>
-      </a>
+      </span>
     </li>
   );
 }
@@ -81,17 +95,15 @@ export default function Liked() {
 
   if (liked.length === 0) {
     return (
-      <section className="screen screen--empty" aria-labelledby="liked-title">
-        <h1 id="liked-title" className="screen__title">
-          Nothing saved yet
-        </h1>
-        <p className="screen__body">Swipe a few cards and your finds collect here.</p>
-        <div className="screen__actions">
-          <Button variant="secondary" onClick={() => withTransition(() => setScreen('discovery'))}>
-            Go to Discover
-          </Button>
-        </div>
-      </section>
+      <EmptyState
+        icon={<LikedIcon width={32} height={32} />}
+        title="Nothing saved yet"
+        body="Swipe a few cards and your finds collect here."
+      >
+        <Button variant="secondary" onClick={() => withTransition(() => setScreen('discovery'))}>
+          Go to Discover
+        </Button>
+      </EmptyState>
     );
   }
 

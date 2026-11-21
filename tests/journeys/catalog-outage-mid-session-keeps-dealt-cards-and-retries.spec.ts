@@ -54,11 +54,11 @@ test("when the catalog drops mid-session, dealt cards still swipe and the app of
     await page.getByRole("button", { name: "Skip", exact: true }).click();
     await expect.poll(async () => (await retry.isVisible()) || ((await title.textContent().catch(() => t)) !== t)).toBe(true);
   }
-  await expect(page.getByText("Couldn't reach the catalog")).toBeVisible();
-  await expect(page.getByText(/That's everything/)).toHaveCount(0);
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeVisible();
+  await expect(page.getByText(/That’s everything/)).toHaveCount(0);
 
   down = false;
   await retry.click();
   await expect(title).toHaveText(/^Track \d+$/);
-  await expect(page.getByText("Couldn't reach the catalog")).toBeHidden();
+  await expect(page.getByText("Couldn’t reach the catalog")).toBeHidden();
 });

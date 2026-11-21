@@ -32,6 +32,7 @@ test("listener seeds artists, an album and a genre; it survives a reload", async
   await page.getByRole("button", { name: new RegExp(`${a2} Band`) }).click();
 
   await page.getByRole("button", { name: "Albums", exact: true }).click();
+  await page.getByRole("radiogroup", { name: "Search scope" }).getByRole("radio", { name: "Albums" }).check();
   await page.getByRole("searchbox", { name: "Search albums" }).fill(al);
   await page.getByRole("button", { name: new RegExp(`${al} LP`) }).click();
   await page.getByRole("button", { name: "Artists", exact: true }).click();
