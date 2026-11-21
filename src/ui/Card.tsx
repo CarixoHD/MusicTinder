@@ -1,8 +1,9 @@
+import { PlayButton } from '../audio/PlayButton';
 import { chipLabel } from '../chips';
 import type { Card as CardModel } from '../types';
 import { ArtworkPlaceholder } from './icons';
 
-/** Static recommendation card. Drag/audio behaviour arrives with the deck slice. */
+/** Recommendation card: artwork, facts, and the sample control in the play slot. */
 export function Card({ card }: { card: CardModel }) {
   return (
     <article className="card">
@@ -14,7 +15,9 @@ export function Card({ card }: { card: CardModel }) {
             <ArtworkPlaceholder />
           </div>
         )}
-        <div className="card__play-slot" aria-hidden="true" />
+        <div className="card__play-slot">
+          <PlayButton card={card} />
+        </div>
       </div>
 
       <h2 className="card__title">{card.title}</h2>
