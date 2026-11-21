@@ -18,3 +18,6 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) Tester and demo seeders must write state the way the real flow does (a like also marks its key seen), otherwise the deck re-deals the demo data and creates duplicates.
 - (milestone review) When matching catalog hits to a name, prefer an exact normalised match before any substring fallback, and tell a transient budget cool-down apart from a real 'no result' so the caller can retry.
 - (milestone review) A mute setting changes what explicit Play does as well: decide whether a user-initiated play while Sound is off turns Sound back on or shows a visible 'sound off' state, and pin that choice in e2e instead of letting the sample play silently while the card shows it as playing.
+- (milestone review) State kept outside React (module-level sessions, caches) must be cleared by resetAll() and must never feed values back into the store after a reset.
+- (milestone review) A component that adopts a long-lived object across mounts must subscribe to its changes (or re-join its pending promise); a .then() bound to the mount that started the work leaves later mounts stale.
+- (milestone review) Test session/retention features with work still in flight at the moment of leaving and returning, not only when everything has already settled.
