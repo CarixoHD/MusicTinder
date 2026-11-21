@@ -26,11 +26,16 @@ interface StoredState {
   taste: { chips: Record<string, number>; creators: Record<string, number> };
 }
 
-async function seedDeck(page: Page, seen: string[] = []): Promise<void> {
+interface SeedOptions {
+  cardType?: 'artist' | 'album' | 'song';
+  seen?: string[];
+}
+
+async function seedDeck(page: Page, { cardType = 'artist', seen = [] }: SeedOptions = {}): Promise<void> {
   const persisted = {
     state: {
       seeds: [SEED],
-      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+      settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType },
       taste: { chips: {}, creators: {}, origins: {} },
       liked: [],
       seen,
@@ -55,13 +60,13 @@ const stored = (page: Page): Promise<StoredState | null> =>
 const deckTitle = (page: Page) => page.locator('.deck__current .card__title');
 
 test.beforeEach(async ({ page }) => {
-  await mockCatalog(page);
+  await mockCatalog(page, { enrichRelatedArtists: true });
 });
 
-test('deals a card with artwork, title, creator and a because line, and prefetches the next cards', async ({
+test('deals a card with artwork, title, creator, year, chips and a because line, and prefetches the next cards', async ({
   page,
 }) => {
-  await seedDeck(page);
+  await seedDeck(page, { cardType: 'album' });
   await page.goto('/');
 
   const current = page.locator('.deck__current');
@@ -70,6 +75,8 @@ test('deals a card with artwork, title, creator and a because line, and prefetch
   await expect(artwork).toHaveAttribute('alt', / — /);
   await expect(current.getByRole('heading', { level: 2 })).toHaveText(/\S/);
   await expect(current.locator('.card__creator')).toHaveText(/\S/);
+  await expect(current.locator('.card__year')).toHaveText(/^\d{4}$/);
+  await expect(current.locator('.tag')).not.toHaveCount(0);
   await expect(current.locator('.card__because')).toContainText(/because you like/i);
 
   // At least three upcoming cards are already in the DOM behind the current one.
@@ -126,7 +133,7 @@ test('likes and skips by arrow key and by button, recording each reaction and de
 });
 
 test('ends quietly when nothing unseen is left and Change seeds returns to Setup', async ({ page }) => {
-  await seedDeck(page, RELATED_KEYS);
+  await seedDeck(page, { seen: RELATED_KEYS });
   await page.goto('/');
 
   await expect(
