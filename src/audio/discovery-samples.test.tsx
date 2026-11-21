@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store/store';
 import { FakeCatalog } from '../testkit/fakeCatalog';
-import type { CardKind } from '../types';
+import type { Card, CardKind, SampleOptions } from '../types';
 import Discovery from '../ui/screens/Discovery';
 import { previewPlayer } from './player';
 
@@ -44,7 +44,38 @@ const click = async (element: HTMLButtonElement): Promise<void> => {
   });
 };
 
-async function renderDeck(cardType: CardKind): Promise<void> {
+/**
+ * A catalog whose sample lookups stay pending, like the real one while it
+ * waits out an iTunes cool-down. The test decides when each preview lands.
+ */
+class LateCatalog extends FakeCatalog {
+  readonly sampleCalls: { key: string; priority: boolean; signal?: AbortSignal }[] = [];
+  private readonly resolvers = new Map<string, (previewUrl: string | undefined) => void>();
+
+  override async samplePreview(card: Card, options: SampleOptions = {}): Promise<string | undefined> {
+    this.sampleCalls.push({ key: card.key, priority: options.priority ?? false, signal: options.signal });
+    return new Promise((resolve) => {
+      this.resolvers.set(card.key, resolve);
+    });
+  }
+
+  resolveSample(key: string, previewUrl: string | undefined): void {
+    const resolve = this.resolvers.get(key);
+    if (!resolve) throw new Error(`no sample lookup pending for ${key}`);
+    this.resolvers.delete(key);
+    resolve(previewUrl);
+  }
+
+  callsFor(key: string): number {
+    return this.sampleCalls.filter((call) => call.key === key).length;
+  }
+
+  signalFor(key: string): AbortSignal | undefined {
+    return this.sampleCalls.find((call) => call.key === key)?.signal;
+  }
+}
+
+async function renderDeck(cardType: CardKind, catalog: FakeCatalog = new FakeCatalog()): Promise<void> {
   useStore.setState({
     seeds: [
       {
@@ -66,7 +97,7 @@ async function renderDeck(cardType: CardKind): Promise<void> {
   });
 
   await act(async () => {
-    root.render(<Discovery catalog={new FakeCatalog()} />);
+    root.render(<Discovery catalog={catalog} />);
   });
   await flush();
   await flush();
@@ -127,5 +158,54 @@ describe('Discovery sample previews', () => {
     expect(snapshot.status).toBe('playing');
     expect(snapshot.key).not.toBe(firstKey);
     expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+  });
+
+  it('gives the visible card’s lookup priority over the next card’s prefetch', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+
+    expect(catalog.sampleCalls[0]).toMatchObject({ priority: true });
+    expect(catalog.sampleCalls[1]).toMatchObject({ priority: false });
+  });
+
+  it('starts the promoted card when its sample lands after the swipe', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+    expect(current().textContent).toContain('No sample');
+
+    await click(button('Like'));
+    const promoted = previewPlayer().getSnapshot();
+    expect(promoted.status).toBe('nosample');
+    const key = promoted.key as string;
+
+    catalog.resolveSample(key, 'https://audio.example.test/late.m4a');
+    await flush();
+
+    expect(previewPlayer().getSnapshot()).toMatchObject({ status: 'playing', key });
+    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+  });
+
+  it('abandons the previous card’s lookup when the listener swipes on', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+    const firstKey = catalog.sampleCalls[0].key;
+
+    await click(button('Like'));
+
+    expect(catalog.signalFor(firstKey)?.aborted).toBe(true);
+  });
+
+  it('asks once for a card whose lookup found no preview, and keeps the No sample state', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+    const upcomingKey = catalog.sampleCalls[1].key;
+    catalog.resolveSample(upcomingKey, undefined);
+    await flush();
+
+    await click(button('Like'));
+    await flush();
+
+    expect(current().textContent).toContain('No sample');
+    expect(catalog.callsFor(upcomingKey)).toBe(1);
   });
 });

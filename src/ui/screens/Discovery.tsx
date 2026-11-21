@@ -98,7 +98,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const [loading, setLoading] = useState(() => deck.state.status === 'dealing' && !deck.state.pool.length);
   // Previews resolved for cards the catalog ships silent, keyed by card key.
   const [samples, setSamples] = useState<ReadonlyMap<string, string>>(() => new Map());
+  // Cards whose lookup has answered; a genuine miss stays "No sample" for good.
   const requested = useRef(new Set<string>());
+  // Lookups still waiting on the catalog budget, so a swipe can abandon them.
+  const lookups = useRef(new Map<string, AbortController>());
   const mounted = useRef(true);
   const cardStartedAt = useRef(0);
   const player = previewPlayer();
@@ -162,23 +165,67 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
 
   // Silent artist/album cards ask the catalog for a preview just in time: the
   // current card for its play button, the next one so a swipe can auto-play.
-  // Fire-and-forget; the deck never waits, and a miss stays "No sample".
+  // Fire-and-forget; the deck never waits. A lookup that meets an iTunes
+  // cool-down waits for a refill (the visible card ahead of the prefetch one)
+  // and is abandoned when its card leaves, so it cannot hold a token the
+  // visible card needs. A genuine miss stays "No sample" for good.
   useEffect(() => {
-    const cards = [state.pool[0], deck.prefetchQueue(state)[0]].filter(
-      (card): card is CardModel =>
-        card !== undefined && !card.previewUrl && !requested.current.has(card.key),
+    const wanted = [state.pool[0], deck.prefetchQueue(state)[0]].filter(
+      (card): card is CardModel => card !== undefined && !card.previewUrl,
     );
-    for (const card of cards) {
-      requested.current.add(card.key);
+    const wantedKeys = new Set(wanted.map((card) => card.key));
+
+    for (const [key, controller] of lookups.current) {
+      if (wantedKeys.has(key)) continue;
+      controller.abort();
+      lookups.current.delete(key);
+      requested.current.delete(key);
+    }
+
+    for (const card of wanted) {
+      if (lookups.current.has(card.key) || requested.current.has(card.key)) continue;
+      const controller = new AbortController();
+      lookups.current.set(card.key, controller);
       void catalog
-        .samplePreview(card)
+        .samplePreview(card, {
+          waitForBudget: true,
+          priority: card.key === state.pool[0]?.key,
+          signal: controller.signal,
+        })
         .then((previewUrl) => {
+          if (controller.signal.aborted) return;
+          lookups.current.delete(card.key);
+          requested.current.add(card.key);
           if (!previewUrl || !mounted.current) return;
           setSamples((current) => new Map(current).set(card.key, previewUrl));
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (!controller.signal.aborted) requested.current.add(card.key);
+          lookups.current.delete(card.key);
+        });
     }
   }, [catalog, deck, state]);
+
+  // Nothing to wait for once the deck is gone.
+  useEffect(
+    () => () => {
+      for (const controller of lookups.current.values()) controller.abort();
+      lookups.current.clear();
+    },
+    [],
+  );
+
+  // A sample that lands after the swipe already tried to play this card (its
+  // lookup was waiting out the budget) starts it now. A card the listener
+  // paused stays paused, and the first card still needs its tap.
+  useEffect(() => {
+    const card = state.pool[0];
+    if (!sound || !card) return;
+    const snapshot = player.getSnapshot();
+    if (snapshot.key !== card.key || snapshot.status !== 'nosample') return;
+    const previewUrl = card.previewUrl ?? samples.get(card.key);
+    if (previewUrl) player.play({ ...card, previewUrl });
+  }, [player, samples, sound, state]);
 
   // Keep the following card's sample warm. The current card loads on its first tap.
   useEffect(() => {
