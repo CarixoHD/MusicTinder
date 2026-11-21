@@ -72,12 +72,22 @@
 @media (max-height: 620px) {
   .deck,
   .deck-loading {
-    --deck-max: min(100%, max(200px, calc(100svh - 376px)));
+    /* The viewport term has to win over the floor: at 553 px tall the old
+       200 px floor beat the height budget and the card ran under the tab bar.
+       The small floor only keeps the width positive on very short windows. */
+    --deck-max: min(100%, max(120px, calc(100svh - 376px)));
   }
 
   .deck:has(> .deck-notice) .deck__stack {
-    max-width: min(100%, max(200px, calc(100svh - 440px)));
+    max-width: min(100%, max(120px, calc(100svh - 440px)));
   }
+}
+
+/* The deck is height-capped to end above the tab bar, so it does not need the
+   nav-height bottom padding that scrollable screens use; keeping it makes the
+   one-card screen scroll for no reason. */
+.app__main:has(> .deck) {
+  padding-bottom: var(--space-4);
 }
 
 .deck__current {
