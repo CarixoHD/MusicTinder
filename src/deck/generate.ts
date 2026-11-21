@@ -46,6 +46,8 @@ export interface GenerateOptions {
   wildcards?: boolean;
   /** The listener's strongest taste chips: a wildcard's chips stay outside these. */
   topChips?: readonly Chip[];
+  /** Counts refills, so successive ones explore different chips (never per swipe). */
+  wildcardTurn?: number;
 }
 
 /**
@@ -243,10 +245,8 @@ export async function generateCandidates(
   /**
    * Mix a couple of exploration cards into the refill: unseen, outside the
    * listener's top chips, from the least-represented seed branch or from a
-   * genre search on a curated chip they have not picked. A genre search may
-   * spend at most WILDCARD_ENRICH_LIMIT enrichments; branch cards were already
-   * enriched with the rest of the pool, so they cost nothing extra. Off means
-   * no wildcard request at all.
+   * genre search on a curated chip they have not picked. Successive refills
+   * take turns through the chips. Off means no wildcard request at all.
    */
   const withWildcards = async (regular: Card[]): Promise<Card[]> => {
     if (options.wildcards !== true || (options.topChips ?? []).length === 0) return regular;
@@ -267,40 +267,62 @@ export async function generateCandidates(
     }
 
     // 2. No branch artist is outside the taste: search a curated chip the
-    //    listener has not picked. The rotation keeps successive refills
-    //    exploring different chips, and the search spends at most
+    //    listener has not picked. The album entity is what makes the term find
+    //    the genre: an artist search only matches acts *named* after it, while
+    //    album hits are tagged with the genre they belong to and carry artwork.
+    //    A hit counts only when its own genre is the chip, so an album merely
+    //    titled "Jazz" cannot pose as one. Album wildcards are those hits; the
+    //    artist/song ones are built from them and spend at most
     //    WILDCARD_ENRICH_LIMIT enrichments.
     if (found.length === 0) {
       const seedChips = new Set(seeds.flatMap((seed) => seed.chips));
       const unpicked = CHIPS.filter(
         (chip) => !seedChips.has(chip.id) && !(options.topChips ?? []).includes(chip.id),
       );
-      let spent = 0;
       if (unpicked.length > 0) {
-        const chip = unpicked[seenKeys.size % unpicked.length];
-        const hits = (await quietly(() => catalog.searchSeeds(chip.label, 'artist'))) ?? [];
+        const chip = unpicked[(options.wildcardTurn ?? 0) % unpicked.length];
+        const hits = (await quietly(() => catalog.searchSeeds(chip.label, 'album'))) ?? [];
+        let spent = 0;
         for (const hit of hits) {
-          if (spent >= WILDCARD_ENRICH_LIMIT || found.length >= WILDCARD_CARDS) break;
-          const creatorKey = (hit.creator || hit.name).trim().toLowerCase();
-          const key =
-            hit.itunesId !== undefined
-              ? `it:artist:${hit.itunesId}`
-              : `dz:artist:${hit.deezerArtistId ?? creatorKey}`;
-          // A genre search that already shows a picked chip saves the enrichment.
-          if (!outside(hit.chips) && hit.chips.length > 0) continue;
-          if (!hit.image || seenKeys.has(key) || excluded.has(creatorKey) || options.poolCreatorKeys?.has(creatorKey)) {
+          if (found.length >= WILDCARD_CARDS) break;
+          if (!hit.chips.includes(chip.id) || !outside(hit.chips)) continue;
+          const creatorKey = hit.creator.trim().toLowerCase();
+          if (excluded.has(creatorKey) || options.poolCreatorKeys?.has(creatorKey)) continue;
+
+          // The search hit is the release itself: artwork and genre included,
+          // so an album wildcard costs no enrichment.
+          if (cardType === 'album' && hit.itunesId !== undefined) {
+            const key = `it:album:${hit.itunesId}`;
+            if (seenKeys.has(key)) continue;
+            found.push({
+              key,
+              kind: 'album',
+              source: 'itunes',
+              title: hit.name,
+              creator: hit.creator,
+              creatorKey,
+              year: hit.year,
+              image: hit.image,
+              chips: hit.chips,
+              related: [],
+              wildcard: true,
+            });
             continue;
           }
+
+          if (spent >= WILDCARD_ENRICH_LIMIT) break;
           spent += 1;
-          const enrichment = await quietly(() => catalog.enrichArtist(hit.name, { waitForBudget: false }));
+          const enrichment = await quietly(() => catalog.enrichArtist(hit.creator, { waitForBudget: false }));
           if (!enrichment || !outside(enrichment.chips)) continue;
           if (cardType === 'artist') {
+            const key = `it:artist:${enrichment.itunesArtistId}`;
+            if (seenKeys.has(key)) continue;
             found.push({
               key,
               kind: 'artist',
-              source: hit.itunesId !== undefined ? 'itunes' : 'deezer',
-              title: hit.name,
-              creator: hit.creator || hit.name,
+              source: 'itunes',
+              title: hit.creator,
+              creator: hit.creator,
               creatorKey,
               image: hit.image,
               chips: enrichment.chips,

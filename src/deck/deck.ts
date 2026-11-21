@@ -135,6 +135,8 @@ export function createDeck(init: DeckInit): Deck {
     swipes: 0,
   };
   let pending: Promise<DeckState> | null = null;
+  /** Counts refills: successive wildcard genre searches explore different chips. */
+  let refills = 0;
   // The last cards dealt, oldest first: the diversity windows carry across
   // commits, so the interleaving keeps its promise as the pool shrinks.
   const recent: Card[] = [];
@@ -198,6 +200,7 @@ export function createDeck(init: DeckInit): Deck {
           waitForFirstCard: state.pool.length === 0,
           wildcards: wildcardsOn,
           topChips: topTasteChips(state.taste),
+          wildcardTurn: refills++,
         });
         // The current card and the prefetched stack are already rendered; a
         // refill may only reorder what comes after them.
