@@ -48,6 +48,15 @@ const click = async (element: HTMLButtonElement): Promise<void> => {
   });
 };
 
+/** jsdom has no media engine: raise the error a dead preview URL would. */
+const failPlayback = async (): Promise<void> => {
+  await act(async () => {
+    for (const audio of document.querySelectorAll('audio')) {
+      audio.dispatchEvent(new Event('error'));
+    }
+  });
+};
+
 /**
  * A catalog whose sample lookups stay pending, like the real one while it
  * waits out an iTunes cool-down. The test decides when each preview lands.
@@ -76,6 +85,23 @@ class LateCatalog extends FakeCatalog {
 
   signalFor(key: string): AbortSignal | undefined {
     return this.sampleCalls.find((call) => call.key === key)?.signal;
+  }
+}
+
+/** A Deezer-style catalog: each lookup signs a fresh, short-lived URL. */
+class ExpiringCatalog extends FakeCatalog {
+  readonly calls: { key: string; url: string }[] = [];
+  private issued = 0;
+
+  override async samplePreview(card: Card): Promise<Sample | undefined> {
+    this.issued += 1;
+    const url = `https://cdnt-preview.dzcdn.net/api/1/sample-${this.issued}.mp3`;
+    this.calls.push({ key: card.key, url });
+    return { previewUrl: url, title: SAMPLE_TITLE };
+  }
+
+  urlsFor(key: string): string[] {
+    return this.calls.filter((call) => call.key === key).map((call) => call.url);
   }
 }
 
@@ -137,7 +163,9 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   previewPlayer().stop();
-  document.body.innerHTML = '';
+  // Keep the player's two buffers in the body: the singleton outlives a test,
+  // and a later test raises its media 'error' event to fake an expired URL.
+  container.remove();
 });
 
 describe('Discovery sample previews', () => {
@@ -292,5 +320,61 @@ describe('Discovery sample previews', () => {
     expect(current().textContent).toContain('No sample');
     expect(sampleLine()).toBeNull();
     expect(catalog.callsFor(upcomingKey)).toBe(1);
+  });
+
+  it('looks an expired sample up once more and retries playback with the fresh URL', async () => {
+    const catalog = new ExpiringCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0].key;
+
+    await click(playButton() as HTMLButtonElement);
+    expect(previewPlayer().getSnapshot()).toMatchObject({ status: 'playing', key });
+
+    await failPlayback();
+    await flush();
+
+    // A signed Deezer URL died: one fresh lookup, and the new URL plays.
+    const urls = catalog.urlsFor(key);
+    expect(urls).toHaveLength(2);
+    expect(previewPlayer().getSnapshot()).toMatchObject({ status: 'playing', key });
+    const sources = [...document.querySelectorAll('audio')].map((audio) => audio.getAttribute('src'));
+    expect(sources).toContain(urls[1]);
+  });
+
+  it('gives up after one retry and reads No sample when the fresh sample fails too', async () => {
+    const catalog = new ExpiringCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0].key;
+
+    await click(playButton() as HTMLButtonElement);
+    await failPlayback();
+    await flush();
+    expect(catalog.urlsFor(key)).toHaveLength(2);
+
+    await failPlayback();
+    await flush();
+
+    expect(current().textContent).toContain('No sample');
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(playButton()).toBeNull();
+    expect(catalog.urlsFor(key)).toHaveLength(2);
+  });
+
+  it('never persists a Deezer sample URL through a like', async () => {
+    const catalog = new ExpiringCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0].key;
+
+    await click(button('Like'));
+    await flush();
+
+    const liked = useStore.getState().liked.find((item) => item.key === key);
+    expect(liked).toBeDefined();
+    expect(liked?.previewUrl).toBeUndefined();
+    expect(JSON.stringify(useStore.getState())).not.toContain('cdnt-preview.dzcdn.net');
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const storageKey = localStorage.key(index) ?? '';
+      expect(localStorage.getItem(storageKey)).not.toContain('cdnt-preview.dzcdn.net');
+    }
   });
 });

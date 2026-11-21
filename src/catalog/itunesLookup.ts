@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { withItunesBudget, type BudgetOptions } from './budget';
 import { cached } from './cache';
+import { artistTopPreview, deezerArtistIdOf, trackSearchPreview } from './deezer';
 
 /**
  * iTunes Search/Lookup adapter for artist enrichment and song/album cards.
@@ -239,17 +240,41 @@ export async function artistAlbums(
 }
 
 /**
- * Just-in-time sample for a card the catalog ships without one: an album's
- * song lookup, or a song search for an artist. A genuine no-match resolves
- * `undefined`; a failure (offline, HTTP error, cooling budget) rejects so the
- * caller can tell a miss from a transient error and retry. With `waitForBudget`
- * the lookup waits for the next token (abandonable with `signal`), so a
- * cooling-deck card still gets its sample. The sample names its song.
+ * First source that finds a preview wins. A failed source does not hide another
+ * source's answer; the failure is only reported when neither found a sample, so
+ * the caller still sees a transient error as retryable, not as "no sample".
+ */
+async function firstSample(attempts: (() => Promise<Sample | undefined>)[]): Promise<Sample | undefined> {
+  let failure: unknown;
+  for (const attempt of attempts) {
+    try {
+      const sample = await attempt();
+      if (sample) return sample;
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure !== undefined) throw failure;
+  return undefined;
+}
+
+/**
+ * Just-in-time sample for a card the catalog ships without one. Artist cards
+ * try Deezer's top tracks first (the card carries its Deezer id and its
+ * previews cost no iTunes budget), then iTunes; album and song cards try
+ * iTunes first, then a Deezer track search for the same artist. A genuine
+ * no-match on both resolves `undefined`; a failure (offline, HTTP error,
+ * cooling budget) rejects so the caller can tell a miss from a transient
+ * error and retry. With `waitForBudget` the iTunes lookup waits for the next
+ * token (abandonable with `signal`). The sample names its song. Deezer URLs are
+ * signed and expire in ~15 min, so nothing here caches or persists them.
  */
 export async function samplePreview(card: Card, options: SampleOptions = {}): Promise<Sample | undefined> {
   if (card.kind === 'song') {
-    return card.previewUrl ? { previewUrl: card.previewUrl, title: card.title } : undefined;
+    if (card.previewUrl) return { previewUrl: card.previewUrl, title: card.title };
+    return trackSearchPreview(card.creator, card.title);
   }
+
   const budget: BudgetOptions = {
     wait: options.waitForBudget ?? false,
     priority: options.priority ?? false,
@@ -274,18 +299,25 @@ export async function samplePreview(card: Card, options: SampleOptions = {}): Pr
     return best;
   };
 
-  if (card.kind === 'album') {
-    const id = albumIdOf(card.key);
-    if (id === undefined) return undefined;
-    const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${ALBUM_SONGS_LIMIT}`, budget);
-    if (songs === null) throw new CatalogError('budget', COOLING_DOWN);
-    return sampleOf(songs.find((song) => song.previewUrl));
-  }
+  const fromItunes = async (): Promise<Sample | undefined> => {
+    if (card.kind === 'album') {
+      const id = albumIdOf(card.key);
+      if (id === undefined) return undefined;
+      const songs = await lookupResults(`/lookup?id=${id}&entity=song&limit=${ALBUM_SONGS_LIMIT}`, budget);
+      if (songs === null) throw new CatalogError('budget', COOLING_DOWN);
+      return sampleOf(songs.find((song) => song.previewUrl));
+    }
+    const results = await lookupResults(
+      `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${ARTIST_SONGS_LIMIT}`,
+      budget,
+    );
+    if (results === null) throw new CatalogError('budget', COOLING_DOWN);
+    return sampleOf(bestByArtist(results, card.creator));
+  };
 
-  const results = await lookupResults(
-    `/search?term=${encodeURIComponent(card.creator)}&media=music&entity=song&limit=${ARTIST_SONGS_LIMIT}`,
-    budget,
-  );
-  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
-  return sampleOf(bestByArtist(results, card.creator));
+  const deezerArtistId = card.kind === 'artist' ? deezerArtistIdOf(card.key) : undefined;
+  if (deezerArtistId !== undefined) {
+    return firstSample([() => artistTopPreview(deezerArtistId), fromItunes]);
+  }
+  return firstSample([fromItunes, () => trackSearchPreview(card.creator, card.title)]);
 }

@@ -1,10 +1,12 @@
-import type { Card, DeezerArtistRef } from '../types';
+import type { Card, DeezerArtistRef, Sample } from '../types';
 import { jsonp } from './deezerJsonp';
 
 /** Deezer public API over the quarantined JSONP transport (ADR-002). */
 
 const DEEZER_API = 'https://api.deezer.com';
 const SEARCH_LIMIT = 5;
+const ARTIST_TOP_LIMIT = 10;
+const TRACK_SEARCH_LIMIT = 10;
 
 interface DeezerArtist {
   id: number;
@@ -12,6 +14,13 @@ interface DeezerArtist {
   picture_big?: string;
   nb_fan?: number;
   nb_album?: number;
+}
+
+interface DeezerTrack {
+  id?: number;
+  title?: string;
+  preview?: string;
+  artist?: { name?: string };
 }
 
 interface DeezerList<T> {
@@ -52,6 +61,43 @@ export async function resolveDeezerArtist(name: string): Promise<DeezerArtistRef
   return alternatives.length > 0
     ? { id: best.id, name: best.name, alternatives }
     : { id: best.id, name: best.name };
+}
+
+const sampleOf = (track: DeezerTrack): Sample | undefined =>
+  track.preview ? { previewUrl: track.preview, title: track.title } : undefined;
+
+/** Artist cards carry their Deezer id in the key (`dz:artist:<id>`). */
+export function deezerArtistIdOf(key: string): number | undefined {
+  const match = /^dz:artist:(\d+)$/.exec(key);
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Any track by the artist with a preview; the top list arrives most popular
+ * first. Deezer signs these URLs for ~15 min, so callers keep them in memory.
+ */
+export async function artistTopPreview(deezerArtistId: number): Promise<Sample | undefined> {
+  const payload = await jsonp<DeezerList<DeezerTrack>>(
+    `${DEEZER_API}/artist/${deezerArtistId}/top?limit=${ARTIST_TOP_LIMIT}`,
+  );
+  for (const track of payload.data ?? []) {
+    const sample = sampleOf(track);
+    if (sample) return sample;
+  }
+  return undefined;
+}
+
+/** Search rows can carry a cover or another act: only this artist's tracks count. */
+export async function trackSearchPreview(artist: string, title: string): Promise<Sample | undefined> {
+  const query = `${artist} ${title}`.trim();
+  const payload = await jsonp<DeezerList<DeezerTrack>>(
+    `${DEEZER_API}/search/track?q=${encodeURIComponent(query)}&limit=${TRACK_SEARCH_LIMIT}`,
+  );
+  const own = (payload.data ?? []).filter(
+    (track) => track.preview && creatorKey(track.artist?.name ?? '') === creatorKey(artist),
+  );
+  const exact = own.find((track) => creatorKey(track.title ?? '') === creatorKey(title));
+  return sampleOf(exact ?? own[0] ?? {});
 }
 
 export async function relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
