@@ -37,8 +37,11 @@ export interface DeckInit {
   sink?: DeckSink;
 }
 
-/** Why a refill left nothing to deal: the catalog returned nothing at all, or
- *  everything it returned was already seen / below the quality floor. */
+/**
+ * Why a refill left nothing to deal. 'no-candidates' is a seeds problem on a
+ * deck with no history; 'filtered' means the listener has already been through
+ * what the catalog offers (or it all fell below the quality floor).
+ */
 export type EmptyReason = 'no-candidates' | 'filtered' | null;
 
 export interface DeckState {
@@ -109,7 +112,11 @@ export function createDeck(init: DeckInit): Deck {
           pool,
           status: pool.length > 0 ? 'dealing' : 'empty',
           emptyReason:
-            pool.length > 0 ? null : generated.length === 0 ? 'no-candidates' : 'filtered',
+            pool.length > 0
+              ? null
+              : generated.length === 0 && seen.size === 0
+                ? 'no-candidates'
+                : 'filtered',
           swipes: 0,
         };
       } catch {

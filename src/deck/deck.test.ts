@@ -176,6 +176,23 @@ describe('deck refill', () => {
     expect(state.emptyReason).toBe('no-candidates');
   });
 
+  it('treats nothing new for a listener with history as the deck end, not empty seeds', async () => {
+    const seen = controlledCards().map((card) => card.key);
+    const deck = createDeck({
+      catalog: new FixedCatalog(controlledCards()),
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+      seen,
+    });
+
+    const state = await deck.refill();
+
+    expect(state.pool).toEqual([]);
+    expect(state.status).toBe('empty');
+    expect(state.emptyReason).toBe('filtered');
+  });
+
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {
     const catalog = new FlakyCatalog(controlledCards());
     const deck = createDeck({
