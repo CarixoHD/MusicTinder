@@ -88,7 +88,11 @@ export default function Setup() {
             {chosenSeeds.map((seed) => (
               <li key={seed.id} className="seed-pill">
                 <span className="seed-pill__thumb" aria-hidden="true">
-                  <ArtworkPlaceholder width={24} height={24} />
+                  {seed.image ? (
+                    <img src={seed.image} alt="" width={24} height={24} />
+                  ) : (
+                    <ArtworkPlaceholder width={24} height={24} />
+                  )}
                 </span>
                 <span className="seed-pill__name">{seed.name}</span>
                 <button
@@ -121,26 +125,26 @@ export default function Setup() {
         </div>
       </section>
 
-      <section className="setup__section" aria-labelledby="setup-type-label">
-        <h2 id="setup-type-label" className="setup__label">
-          Deal me
-        </h2>
-        <div className="segmented" role="group" aria-labelledby="setup-type-label">
-          {CARD_TYPES.map((type) => (
-            <button
-              key={type.id}
-              type="button"
-              className="segmented__button"
-              aria-pressed={cardType === type.id}
-              onClick={() => setSettings({ cardType: type.id })}
-            >
-              {type.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
+      {/* The last step, pinned above the tab bar: what to deal, then start. */}
       <div className="setup__footer">
+        <div className="setup__deal">
+          <h2 id="setup-type-label" className="setup__label">
+            Deal me
+          </h2>
+          <div className="segmented" role="group" aria-labelledby="setup-type-label">
+            {CARD_TYPES.map((type) => (
+              <button
+                key={type.id}
+                type="button"
+                className="segmented__button"
+                aria-pressed={cardType === type.id}
+                onClick={() => setSettings({ cardType: type.id })}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <Button
           variant="primary"
           className="setup__start"

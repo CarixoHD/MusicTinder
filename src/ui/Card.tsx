@@ -20,11 +20,14 @@ export function Card({ card }: { card: CardModel }) {
       ? [KIND_LABEL.artist, card.chips[0] && chipLabel(card.chips[0])].filter(Boolean).join(' · ')
       : card.creator;
 
+  // Spoken once: an artist's creator is the artist again.
+  const spoken = card.kind === 'artist' ? card.title : `${card.title} — ${card.creator}`;
+
   return (
     <article className="card">
       <div className="card__art">
         {card.image ? (
-          <img src={card.image} alt={`${card.title} — ${card.creator}`} />
+          <img src={card.image} alt={spoken} />
         ) : (
           <div className="card__placeholder">
             <ArtworkPlaceholder />
@@ -52,7 +55,7 @@ export function Card({ card }: { card: CardModel }) {
       {card.because && <p className="card__because">Because you like {card.because}</p>}
 
       <p className="sr-only" aria-live="polite">
-        {card.title} — {card.creator}
+        {spoken}
       </p>
     </article>
   );

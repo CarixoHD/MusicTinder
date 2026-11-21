@@ -152,6 +152,8 @@ function readSeed(value: unknown, read: ReadReport): Seed | null {
   if (itunesCollectionId !== undefined) seed.itunesCollectionId = itunesCollectionId;
   const creatorKey = readOptionalString(value.creatorKey, read);
   if (creatorKey !== undefined) seed.creatorKey = creatorKey;
+  const image = readOptionalString(value.image, read);
+  if (image !== undefined) seed.image = image;
   return seed;
 }
 

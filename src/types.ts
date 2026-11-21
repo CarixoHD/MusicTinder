@@ -47,6 +47,8 @@ export interface Seed {
   itunesCollectionId?: number;
   chips: Chip[];
   creatorKey?: string;
+  /** Artwork shown on the seed's pill in Setup. */
+  image?: string;
 }
 
 /** A catalog search hit shown in Setup; never persisted until chosen. */

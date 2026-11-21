@@ -38,6 +38,7 @@ const seedFrom = (candidate: SeedCandidate): Seed | null => {
     name: candidate.name,
     chips: candidate.chips,
     creatorKey: candidate.creator.trim().toLowerCase(),
+    ...(candidate.image !== undefined && { image: candidate.image }),
   };
 
   if (candidate.deezerArtistId !== undefined) {
