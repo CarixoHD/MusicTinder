@@ -149,6 +149,23 @@ class BigCatalog extends FixedCatalog {
   }
 }
 
+/** Deals `first` on the first refill, then `later` — which may score higher. */
+class GrowingCatalog extends FixedCatalog {
+  private calls = 0;
+
+  constructor(
+    private readonly first: Card[],
+    private readonly later: Card[],
+  ) {
+    super([...first, ...later]);
+  }
+
+  override async relatedArtists(): Promise<Card[]> {
+    this.calls += 1;
+    return this.calls === 1 ? this.first : this.later;
+  }
+}
+
 /** Records whether generation was allowed to wait on the iTunes budget. */
 class RecordingCatalog extends FakeCatalog {
   readonly enrichWaits: boolean[] = [];
@@ -227,6 +244,33 @@ describe('deck refill', () => {
     expect(state.pool.every((card) => card.chips.length > 0 && card.image !== undefined)).toBe(true);
     expect(scoresDescending(state.taste, state.pool)).toBe(true);
     expect(state.pool[0].because).toBeDefined();
+  });
+
+  it('never replaces the top or next card already on screen when a refill finds better candidates', async () => {
+    // Famous cards are dampened, so the newcomer below outranks all of them.
+    const onScreen = [1, 2, 3, 4].map((id) => ({
+      ...artistCard(id, 'rock'),
+      related: ['anchor'],
+      fans: 5_000_000,
+    }));
+    const better = { ...artistCard(99, 'rock'), related: ['anchor'] };
+    const deck = createDeck({
+      catalog: new GrowingCatalog(onScreen, [...onScreen, better]),
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+
+    await deck.refill();
+    deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 9000 });
+    const visible = deck.state.pool.map((card) => card.key);
+
+    const state = await deck.refill();
+
+    // The current card and the one waiting behind it stay where the UI showed
+    // them; only the pool behind the visible stack may re-rank.
+    expect(state.pool.slice(0, 3).map((card) => card.key)).toEqual(visible);
+    expect(state.pool.map((card) => card.key)).toContain(better.key);
   });
 
   it('keeps at least three upcoming cards ready beyond the current one', async () => {
