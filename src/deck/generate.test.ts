@@ -824,14 +824,16 @@ describe('generateCandidates', () => {
     expect(catalog.enrichWaits[3]).toBe(false);
   });
 
-  it('bounds the wait so a seed whose related artists all miss ends without failing', async () => {
+  it('reports a budget cool-down, not a dry deck, when the wait bound leaves artists unchecked', async () => {
     const catalog = new CoolingUntaggableCatalog();
 
-    const cards = await generateCandidates(catalog, [ARTIST_SEEDS[0]], 'artist', new Set(), {
-      waitForFirstCard: true,
-    });
-
-    expect(cards).toEqual([]);
+    // The bound keeps the deck from waiting forever, but the artists after it
+    // were never checked: the caller must retry, not claim "nothing there".
+    await expect(
+      generateCandidates(catalog, [ARTIST_SEEDS[0]], 'artist', new Set(), {
+        waitForFirstCard: true,
+      }),
+    ).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     expect(catalog.enrichWaits.filter(Boolean)).toHaveLength(WAIT_ARTIST_LIMIT);
     expect(catalog.enrichWaits.length).toBeGreaterThan(WAIT_ARTIST_LIMIT);
   });

@@ -220,12 +220,17 @@ export function createDeck(init: DeckInit): Deck {
         };
       } catch (error) {
         // A rejected refill keeps the cards already in hand and surfaces
-        // `stalled` so the caller can offer a retry — except when the only
-        // failure is the app's own iTunes budget cooling down and there are
-        // cards to deal: nothing failed on the network, so the deck keeps
-        // swiping and refills later instead of claiming the catalog is down.
+        // `stalled` so the caller can offer a retry. The app's own iTunes
+        // allowance is different: with cards to deal nothing failed on the
+        // network, so the deck keeps swiping; with none, the artists it left
+        // unchecked make this a retryable cool-down, never the seeds' fault and
+        // never the outage copy.
         const coolingDown = error instanceof CatalogError && error.kind === 'budget';
-        if (!coolingDown || state.pool.length === 0) state = { ...state, status: 'stalled' };
+        if (!coolingDown) {
+          state = { ...state, status: 'stalled' };
+        } else if (state.pool.length === 0) {
+          state = { ...state, status: 'cooling', emptyReason: null };
+        }
       }
       return state;
     })().finally(() => {
