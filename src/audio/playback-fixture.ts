@@ -117,6 +117,7 @@ export async function mockPlaybackCatalog(page: Page): Promise<void> {
         id: artist.deezerId,
         name: artist.name,
         nb_fan: 1000,
+        nb_album: 6,
         picture_medium: artwork(artist.deezerId),
         picture_big: artwork(artist.deezerId),
       })),

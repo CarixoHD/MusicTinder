@@ -239,6 +239,37 @@ test('turning Sound off stops the sample that is playing', async ({ page }) => {
   await expect.poll(() => anyAudioPlaying(page)).toBe(false);
 });
 
+test('Reset reads as the danger action, not as another primary button', async ({ page }) => {
+  await page.goto('/');
+  const dialog = await openSettings(page);
+  const style = (name: string) =>
+    dialog.getByRole('button', { name }).evaluate((element) => ({
+      background: getComputedStyle(element).backgroundColor,
+      color: getComputedStyle(element).color,
+    }));
+
+  const reset = dialog.getByRole('button', { name: 'Reset all my data' });
+  await expect(reset).toBeVisible();
+  // Secondary weight like Edit seeds, but the reset-only danger colour.
+  const resetStyle = await style('Reset all my data');
+  expect(resetStyle.background).toBe((await style('Edit seeds')).background);
+  expect(resetStyle.color).toBe('rgb(229, 101, 79)');
+
+  await reset.click();
+
+  // Confirming is the one filled danger button, with canvas-coloured text.
+  const deleteStyle = await style('Delete everything');
+  expect(deleteStyle.background).toBe('rgb(229, 101, 79)');
+  expect(deleteStyle.color).toBe('rgb(8, 9, 10)');
+
+  // Cancel and Delete share the content width as a two-column pair.
+  const cancelBox = (await dialog.getByRole('button', { name: 'Cancel' }).boundingBox())!;
+  const deleteBox = (await dialog.getByRole('button', { name: 'Delete everything' }).boundingBox())!;
+  expect(cancelBox.width).toBeCloseTo(deleteBox.width, 0);
+  expect(cancelBox.y).toBeCloseTo(deleteBox.y, 0);
+  expect(cancelBox.x).toBeLessThan(deleteBox.x);
+});
+
 test('Reset asks first: cancel keeps the data, confirming wipes it and shows Setup', async ({
   page,
 }) => {

@@ -250,6 +250,7 @@ button {
 .empty-state__body {
   max-width: 32ch;
   margin: 0;
+  text-wrap: balance;
   color: var(--text-muted);
   font-size: var(--text-body-size);
   line-height: 1.5;
@@ -656,10 +657,22 @@ button {
   color: var(--bg-canvas);
 }
 
-.button--secondary {
+.button--secondary,
+.button--secondary-danger {
   border-color: var(--border-hairline);
   background: var(--bg-subtle);
   color: var(--text-primary);
+}
+
+/* Reset only: the quiet weight of a secondary button with the danger colour. */
+.button--secondary-danger {
+  color: var(--danger);
+}
+
+/* The one irreversible action: filled danger with canvas-coloured text. */
+.button--danger {
+  background: var(--danger);
+  color: var(--bg-canvas);
 }
 
 /* Recommendation card (static shell) */
@@ -762,11 +775,16 @@ button {
   font-weight: var(--text-meta-weight);
 }
 
+/* One line: a long seed name truncates instead of growing the card and
+   pushing the like/skip controls toward the tab bar. */
 .card__because {
   margin: 0;
+  overflow: hidden;
   color: var(--text-tertiary);
   font-size: var(--text-meta-size);
   line-height: var(--text-meta-line);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* Settings sheet */
@@ -815,6 +833,14 @@ button {
   color: var(--text-secondary);
   font-size: var(--text-body-size);
   line-height: var(--text-body-line);
+}
+
+/* Cancel and Delete match the sheet's full-width controls as a pair. */
+.sheet__confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
 }
 
 /* Sound switch: label sits outside the 44×24 track; the button keeps a 44 px

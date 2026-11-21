@@ -4,22 +4,80 @@
   gap: var(--space-3);
 }
 
+/* The card's width is also its height budget: the artwork is square, so a
+   width cap is what keeps the like/skip buttons above the fixed tab bar. The
+   viewport-height term wins over the width floor, and it covers a two-line
+   title (76 px at display size) plus the card's text and the chrome.
+   Everything is laid out from this one value. */
+.deck,
+.deck-loading {
+  --deck-max: min(100%, max(220px, calc(100svh - 392px)));
+}
+
 /* The inline retry takes a row of its own: give the card that much less
    height so the like/skip buttons stay clear of the tab bar. */
 .deck:has(> .deck-notice) .deck__stack {
-  max-width: min(100%, max(220px, calc(100svh - 544px)));
+  max-width: min(100%, max(220px, calc(100svh - 456px)));
 }
 
 .deck__stack {
   position: relative;
-  /* Keep the card and its controls clear of the fixed tab bar on short
-     viewports, but never below most of the column: the artwork is the hero. */
-  max-width: min(100%, max(85%, calc(100svh - 480px)));
+  max-width: var(--deck-max);
   /* Auto cross-axis margins stop the column stretch, so without an explicit
      width the card shrink-wraps its text and the artwork shrinks with it. */
   width: 100%;
   /* Room for the 10 px peek of the card behind. */
   margin: 0 auto 10px;
+}
+
+/* Short viewports (a laptop window at 600/720/800, a small phone): reclaim
+   the chrome and the card's row rhythm so the card stays large and readable
+   while a two-line title still leaves the buttons above the tab bar. Above
+   840 px the full-width card leaves room for the untrimmed card. */
+@media (max-height: 840px) {
+  .deck,
+  .deck-loading {
+    --deck-max: min(100%, max(220px, calc(100svh - 342px)));
+  }
+
+  .deck:has(> .deck-notice) .deck__stack {
+    max-width: min(100%, max(220px, calc(100svh - 408px)));
+  }
+
+  .app__main {
+    padding-top: var(--space-2);
+  }
+
+  .deck {
+    gap: var(--space-1);
+  }
+
+  .deck__stack {
+    margin-bottom: var(--space-1);
+  }
+
+  .card {
+    gap: var(--space-1);
+    padding: var(--space-2) 10px;
+  }
+
+  .card__meta {
+    gap: var(--space-1);
+  }
+}
+
+/* Very short windows: at these widths a year + release type + the longest
+   genre tag no longer fit on one meta row, so the budget reserves the second
+   row instead of letting it push the buttons under the tab bar. */
+@media (max-height: 620px) {
+  .deck,
+  .deck-loading {
+    --deck-max: min(100%, max(200px, calc(100svh - 376px)));
+  }
+
+  .deck:has(> .deck-notice) .deck__stack {
+    max-width: min(100%, max(200px, calc(100svh - 440px)));
+  }
 }
 
 .deck__current {
@@ -91,7 +149,7 @@
 .deck-loading__skeleton {
   display: flex;
   width: 100%;
-  max-width: min(100%, max(85%, calc(100svh - 480px)));
+  max-width: var(--deck-max);
   flex-direction: column;
   gap: var(--space-3);
   margin-inline: auto;

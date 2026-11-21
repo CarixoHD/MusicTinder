@@ -181,12 +181,12 @@ export default function SettingsSheet() {
                 <p className="sheet__body">
                   This deletes your seeds, likes and taste on this device.
                 </p>
-                <div className="screen__actions">
+                <div className="sheet__confirm-actions">
                   <Button variant="secondary" autoFocus onClick={() => setIsConfirmingReset(false)}>
                     Cancel
                   </Button>
                   <Button
-                    variant="primary"
+                    variant="danger"
                     onClick={() => {
                       resetAll();
                       setIsConfirmingReset(false);
@@ -197,7 +197,7 @@ export default function SettingsSheet() {
                 </div>
               </div>
             ) : (
-              <Button variant="secondary" onClick={() => setIsConfirmingReset(true)}>
+              <Button variant="secondary-danger" onClick={() => setIsConfirmingReset(true)}>
                 Reset all my data
               </Button>
             )}

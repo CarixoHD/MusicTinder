@@ -15,7 +15,11 @@ test('a fresh profile opens the setup shell on the dark canvas', async ({ page }
 
   const tabbar = page.getByRole('navigation', { name: 'Main' });
   await expect(tabbar).toBeVisible();
-  await expect(tabbar.getByRole('button', { name: 'Discover' })).toBeVisible();
+  // Setup is part of the Discover tab, so the nav never looks dead on first run.
+  await expect(tabbar.getByRole('button', { name: 'Discover' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
   await expect(tabbar.getByRole('button', { name: 'Liked' })).toBeVisible();
   // Settings is a sheet from the header, not a third tab.
   await expect(tabbar.getByRole('button', { name: 'Settings', exact: true })).toHaveCount(0);

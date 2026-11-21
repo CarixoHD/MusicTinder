@@ -33,6 +33,9 @@ function PauseIcon() {
 }
 
 /** Muted waveform: the no-sample card still reads as audio, just silent. */
+const RING_RADIUS = 22;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
 function MutedWaveIcon() {
   return (
     <svg {...icon} width={16} height={16}>
@@ -43,7 +46,7 @@ function MutedWaveIcon() {
 
 /**
  * The card's audio affordance: a 48 px glass circle in the artwork's play slot.
- * Icon, hairline progress and accessible name all say the same state; the
+ * Icon, progress ring and accessible name all say the same state; the
  * no-preview card shows a visible "No sample" pill and stays swipeable.
  */
 export function PlayButton({ card }: { card: CardModel }) {
@@ -78,13 +81,25 @@ export function PlayButton({ card }: { card: CardModel }) {
         player.play(card);
       }}
     >
-      {isPlaying ? <PauseIcon /> : <PlayIcon />}
-      <span className="play-button__track" aria-hidden="true">
-        <span
-          className="play-button__progress"
-          style={{ transform: `scaleX(${progress})` }}
+      {/* The sample's position is a 2 px ring around the circle, so it stays
+          legible at the 48 px size where a short hairline disappeared. */}
+      <svg
+        className="play-button__ring"
+        viewBox="0 0 48 48"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle className="play-button__ring-track" cx="24" cy="24" r={RING_RADIUS} />
+        <circle
+          className="play-button__ring-progress"
+          cx="24"
+          cy="24"
+          r={RING_RADIUS}
+          strokeDasharray={RING_CIRCUMFERENCE}
+          strokeDashoffset={RING_CIRCUMFERENCE * (1 - progress)}
         />
-      </span>
+      </svg>
+      {isPlaying ? <PauseIcon /> : <PlayIcon />}
     </button>
   );
 }

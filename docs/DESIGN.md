@@ -54,7 +54,7 @@ separate palette.
 | `--accent` | `#8b8ff0` | `#4f56c7` |
 | `--accent-subtle` | `rgba(139,143,240,.14)` | `rgba(79,86,199,.10)` |
 | `--like` | `--accent` | `--accent` |
-| `--danger` | `#e5654f` | `#b3402c` (unused in v1 interactions; reset only) |
+| `--danger` | `#e5654f` | `#b3402c` (reset only) |
 
 Every text token clears WCAG AA (≥ 4.5:1) against both `--bg-canvas` and
 `--bg-elevated` in dark and light, so 13 px meta text is never decoration.
@@ -78,9 +78,23 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   dragged card (`0 8px 32px rgba(0,0,0,.35)` dark / `.12` light).
 - Single column, centered, `max-width: 480px`. `100svh` viewport, `viewport-fit=cover`,
   safe-area insets on bottom nav and top header.
+- Deck height cap: the card column is `min(100%, max(220px, calc(100svh - 392px)))`
+  (stack and loading skeleton). The viewport-height budget wins over the width
+  floor and covers a two-line title, so like/skip never sit under the fixed tab
+  bar. At viewport heights ≤ 840 px a compact density budgets
+  `calc(100svh - 342px)`: 8 px main top padding, 4 px deck gap, 4 px stack
+  margin, and a card with 10 px sides, 8 px top and bottom and 4 px row gaps.
+  That keeps the card large (≈376 px at 1280 × 720) while a two-line title still
+  leaves the buttons visible; above 840 px the full-width card has room for the
+  untrimmed card. Below 620 px the budget tightens once more
+  (`calc(100svh - 376px)`) because a year + release type + the longest genre tag
+  wrap to a second meta row there; the compact mode also tightens the meta row
+  gap to 4 px.
 - One screen visible at a time; two-tab bottom bar (Discover, Liked) in `--bg-glass`.
   Settings is a sheet reachable from the header only. Content never sits under chrome:
-  pad with the nav's height.
+  pad with the nav's height. Setup belongs to the Discover tab: while the user
+  picks seeds the tab keeps its accent and `aria-current`, and with no seeds the
+  Discover tab opens Setup directly instead of a second empty state.
 - At ≥ 1024 px the column keeps its width, but header and tab-bar fills go transparent
   so the shell and canvas are one surface, not a phone emulator floating on a page.
 
@@ -91,10 +105,16 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   below. Fixed aspect-ratio artwork + neutral placeholder (no layout shift on load).
   Below, left-aligned: title (`text-display`, clamped to 2 lines; `text-display-long`
   when over ~18 characters), creator `--text-secondary` (for an artist card:
-  `Artist · genre`, never the name again), year + ≤ 2 chips (`text-meta`), the quiet
-  `because you like X` line in `--text-tertiary`. Play/pause as a 48 px glass circle
-  overlapping the artwork's lower-right corner; sound state shown by icon **and** a
-  2 px progress hairline, never colour alone. Like/skip as two 56 px glass buttons
+  `Artist · genre`, never the name again; the tag row carries the second genre,
+  or the Deezer album count when the artist has only one genre, so a genre is
+  never printed twice), year + album release type + ≤ 2 chips (`text-meta`;
+  Apple's ` - Single` / ` - EP` suffix is stripped from the title and becomes the
+  release-type tag), the quiet `because you like X` line on one line (ellipsis
+  when it does not fit) in
+  `--text-tertiary`. Play/pause as a 48 px glass circle overlapping the artwork's
+  lower-right corner; sound state shown by icon **and** a 2 px progress ring around
+  the circle (`--text-primary` at 0.9 over the glass, hairline track), never colour
+  alone. Like/skip as two 56 px glass buttons
   under the card. The next card sits behind at `scale(.96) translateY(10px)` (origin bottom centre, so
   its edge peeks 10 px),
   opacity .6, and is promoted to scale 1 as the top card leaves. Dragged state lifts
@@ -107,8 +127,11 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   `--text-primary`, secondary line, two quiet buttons: "Fresh deck" (primary) and
   "Change seeds" (secondary). No skeleton graveyard, no sad illustration.
 - **Buttons**: primary = `--accent` background, canvas-coloured text, `--radius-control`;
-  secondary = `--bg-subtle` + hairline border; all ≥ 44 px tall; pressed state
-  = scale 0.98 (spring), never an opacity flicker.
+  secondary = `--bg-subtle` + hairline border; secondary-danger = the secondary
+  weight with `--danger` text; danger = `--danger` fill with canvas-coloured text,
+  reserved for the reset confirmation's final step (Cancel/Delete sit as a
+  two-column pair matching the sheet's full-width controls); all ≥ 44 px tall;
+  pressed state = scale 0.98 (spring), never an opacity flicker.
 - **Chips**: pill, `text-meta`, unselected = `--bg-subtle` + hairline; selected =
   `--accent-subtle` + 1 px accent border + accent text, font-weight 500 and a 12 px
   leading checkmark, so state never relies on hue alone. Multi-select wraps in a grid.
@@ -130,7 +153,8 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   accent-filled when on, neutral hairline track when off, label outside the control.
 - **Empty states** (Liked empty, no seeds, deck cold/end): one EmptyState component:
   32 px icon in `--text-muted`, `text-title` (20/600) in `--text-primary`, body
-  15/1.5 `--text-muted` capped at 32ch, 24 px before the actions, and one secondary
+  15/1.5 `--text-muted` capped at 32ch and balanced (`text-wrap: balance`) so no
+  line is left with a lone last word, 24 px before the actions, and one secondary
   button token. Copy uses curly ’ throughout.
 - **Glass chrome**: header and bottom bar use `--bg-glass` + `backdrop-filter:
   blur(24px)` + hairline top/bottom border — the Apple Music material, nothing
