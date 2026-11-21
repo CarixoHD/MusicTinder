@@ -46,8 +46,9 @@ function MutedWaveIcon() {
 
 /**
  * The card's audio affordance: a 48 px glass circle in the artwork's play slot.
- * Icon, progress ring and accessible name all say the same state; the
- * no-preview card shows a visible "No sample" pill and stays swipeable.
+ * Icon, progress ring and accessible name all say the same state. A card
+ * without a preview yet shows "Finding sample" while its lookup runs; only an
+ * answered miss shows "No sample". Both pills share one footprint.
  */
 export function PlayButton({ card }: { card: CardModel }) {
   const player = previewPlayer();
@@ -55,9 +56,11 @@ export function PlayButton({ card }: { card: CardModel }) {
 
   if (!card.previewUrl) {
     return (
-      <span className="play-button play-button--empty">
+      <span className={`play-button play-button--empty${card.samplePending ? ' play-button--loading' : ''}`}>
         <MutedWaveIcon />
-        <span className="play-button__label">No sample</span>
+        <span className="play-button__label">
+          <span>{card.samplePending ? 'Finding sample' : 'No sample'}</span>
+        </span>
       </span>
     );
   }

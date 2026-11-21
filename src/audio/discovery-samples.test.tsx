@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store/store';
 import { FakeCatalog, SAMPLE_TITLE } from '../testkit/fakeCatalog';
-import type { Card, CardKind, Sample, SampleOptions } from '../types';
+import { CatalogError, type Card, type CardKind, type Sample, type SampleOptions } from '../types';
 import Discovery from '../ui/screens/Discovery';
 import { previewPlayer } from './player';
 
@@ -76,6 +76,22 @@ class LateCatalog extends FakeCatalog {
 
   signalFor(key: string): AbortSignal | undefined {
     return this.sampleCalls.find((call) => call.key === key)?.signal;
+  }
+}
+
+/** A catalog whose lookups fail once, like a transient network error. */
+class FlakyCatalog extends FakeCatalog {
+  readonly calls: string[] = [];
+  fail = true;
+
+  override async samplePreview(card: Card): Promise<Sample | undefined> {
+    this.calls.push(card.key);
+    if (this.fail) throw new CatalogError('network');
+    return super.samplePreview(card);
+  }
+
+  callsFor(key: string): number {
+    return this.calls.filter((call) => call === key).length;
   }
 }
 
@@ -185,10 +201,59 @@ describe('Discovery sample previews', () => {
     expect(catalog.sampleCalls[1]).toMatchObject({ priority: false });
   });
 
+  it('shows a loading state, not No sample, while the current card’s lookup is pending', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+
+    expect(current().textContent).toContain('Finding sample');
+    expect(current().textContent).not.toContain('No sample');
+    expect(playButton()).toBeNull();
+
+    const key = catalog.sampleCalls[0].key;
+    catalog.resolveSample(key, { previewUrl: 'https://audio.example.test/late.m4a', title: 'Late Song' });
+    await flush();
+
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe('Play sample: Late Song');
+  });
+
+  it('shows No sample only once a lookup has answered with no match', async () => {
+    const catalog = new LateCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.sampleCalls[0].key;
+
+    catalog.resolveSample(key, undefined);
+    await flush();
+
+    expect(current().textContent).toContain('No sample');
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(catalog.callsFor(key)).toBe(1);
+  });
+
+  it('keeps a failed lookup retryable and asks again when the network returns', async () => {
+    const catalog = new FlakyCatalog();
+    await renderDeck('artist', catalog);
+    const key = catalog.calls[0];
+
+    expect(catalog.callsFor(key)).toBe(1);
+    expect(current().textContent).toContain('Finding sample');
+    expect(current().textContent).not.toContain('No sample');
+
+    catalog.fail = false;
+    await act(async () => {
+      window.dispatchEvent(new Event('online'));
+    });
+    await flush();
+
+    expect(catalog.callsFor(key)).toBe(2);
+    expect(current().textContent).not.toContain('Finding sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
+  });
+
   it('starts the promoted card when its sample lands after the swipe', async () => {
     const catalog = new LateCatalog();
     await renderDeck('artist', catalog);
-    expect(current().textContent).toContain('No sample');
+    expect(current().textContent).toContain('Finding sample');
 
     await click(button('Like'));
     const promoted = previewPlayer().getSnapshot();

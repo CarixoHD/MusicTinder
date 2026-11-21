@@ -100,8 +100,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const [loading, setLoading] = useState(() => deck.state.status === 'dealing' && !deck.state.pool.length);
   // Previews resolved for cards the catalog ships silent, keyed by card key.
   const [samples, setSamples] = useState<ReadonlyMap<string, Sample>>(() => new Map());
-  // Cards whose lookup has answered; a genuine miss stays "No sample" for good.
-  const requested = useRef(new Set<string>());
+  // Cards whose lookup answered with a genuine miss: only those read "No sample".
+  const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set());
+  // Bumped when the network returns, so failed lookups are asked again.
+  const [retryTick, setRetryTick] = useState(0);
   // Lookups still waiting on the catalog budget, so a swipe can abandon them.
   const lookups = useRef(new Map<string, AbortController>());
   const mounted = useRef(true);
@@ -162,11 +164,17 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       const sample = samples.get(card.key);
       const previewUrl = card.previewUrl ?? sample?.previewUrl;
       const sampleTitle = card.sampleTitle ?? sample?.title;
-      return previewUrl === card.previewUrl && sampleTitle === card.sampleTitle
+      // A song card's silence is final; an artist/album card is "Finding
+      // sample" until a lookup answers. Only a miss may read "No sample".
+      const samplePending =
+        !previewUrl && card.kind !== 'song' && !answered.has(card.key);
+      return previewUrl === card.previewUrl &&
+        sampleTitle === card.sampleTitle &&
+        samplePending === Boolean(card.samplePending)
         ? card
-        : { ...card, previewUrl, sampleTitle };
+        : { ...card, previewUrl, sampleTitle, samplePending: samplePending || undefined };
     },
-    [samples],
+    [answered, samples],
   );
 
   // Silent artist/album cards ask the catalog for a preview just in time: the
@@ -174,7 +182,8 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   // Fire-and-forget; the deck never waits. A lookup that meets an iTunes
   // cool-down waits for a refill (the visible card ahead of the prefetch one)
   // and is abandoned when its card leaves, so it cannot hold a token the
-  // visible card needs. A genuine miss stays "No sample" for good.
+  // visible card needs. Only a genuine miss is recorded: a failed lookup stays
+  // retryable and is asked again when the card is current again.
   useEffect(() => {
     const wanted = [state.pool[0], deck.prefetchQueue(state)[0]].filter(
       (card): card is CardModel => card !== undefined && !card.previewUrl,
@@ -185,11 +194,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       if (wantedKeys.has(key)) continue;
       controller.abort();
       lookups.current.delete(key);
-      requested.current.delete(key);
     }
 
     for (const card of wanted) {
-      if (lookups.current.has(card.key) || requested.current.has(card.key)) continue;
+      if (lookups.current.has(card.key) || answered.has(card.key)) continue;
       const controller = new AbortController();
       lookups.current.set(card.key, controller);
       void catalog
@@ -201,16 +209,27 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
         .then((sample) => {
           if (controller.signal.aborted) return;
           lookups.current.delete(card.key);
-          requested.current.add(card.key);
-          if (!sample || !mounted.current) return;
+          if (!sample) {
+            setAnswered((current) => new Set(current).add(card.key));
+            return;
+          }
+          if (!mounted.current) return;
           setSamples((current) => new Map(current).set(card.key, sample));
         })
         .catch(() => {
-          if (!controller.signal.aborted) requested.current.add(card.key);
+          // Not a miss: leave the card "Finding sample" and retry it later.
           lookups.current.delete(card.key);
         });
     }
-  }, [catalog, deck, state]);
+  }, [answered, catalog, deck, retryTick, state]);
+
+  // A failed lookup is asked again once the network is back; the effect above
+  // also retries any card that becomes current again.
+  useEffect(() => {
+    const retry = () => setRetryTick((tick) => tick + 1);
+    window.addEventListener('online', retry);
+    return () => window.removeEventListener('online', retry);
+  }, []);
 
   // Nothing to wait for once the deck is gone.
   useEffect(
