@@ -6,6 +6,10 @@
 
 .deck__stack {
   position: relative;
+  /* Keep the card and its controls clear of the fixed tab bar on short
+     viewports; on a phone the cap is wider than the column and does nothing. */
+  max-width: min(100%, max(240px, calc(100svh - 380px)));
+  margin-inline: auto;
 }
 
 /* The next cards are laid out but invisible: they are the prefetch buffer, so
@@ -13,6 +17,7 @@
 .deck__upcoming {
   position: absolute;
   inset: 0;
+  overflow: hidden;
   visibility: hidden;
   pointer-events: none;
 }
