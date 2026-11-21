@@ -142,6 +142,57 @@ class BranchCatalog implements Catalog {
   }
 }
 
+/**
+ * Two seed branches: a large one on the listener's taste and a small one on a
+ * chip they never picked, whose cards are therefore wildcard candidates.
+ */
+class WildcardBranchCatalog implements Catalog {
+  readonly searches: string[] = [];
+  private readonly branchCards = new Map<number, Card[]>();
+
+  constructor() {
+    this.branchCards.set(
+      4101,
+      Array.from({ length: 10 }, (_, index) => artistCard(100 + index, 'electronic')),
+    );
+    // The least-represented branch: two cards outside the top chips.
+    this.branchCards.set(
+      4102,
+      Array.from({ length: 2 }, (_, index) => artistCard(200 + index, 'pop')),
+    );
+  }
+
+  async searchSeeds(term: string): Promise<SeedCandidate[]> {
+    this.searches.push(term);
+    return [];
+  }
+
+  async resolveDeezerArtist(name: string) {
+    return { id: 1, name };
+  }
+
+  async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return (this.branchCards.get(deezerArtistId) ?? []).slice(0, limit);
+  }
+
+  async enrichArtist(name: string) {
+    const card = [...this.branchCards.values()].flat().find((entry) => entry.creatorKey === name.trim().toLowerCase());
+    return card ? { itunesArtistId: 5000, chips: card.chips } : null;
+  }
+
+  async artistTopTracks(): Promise<Card[]> {
+    return [];
+  }
+
+  async artistAlbums(): Promise<Card[]> {
+    return [];
+  }
+
+  async samplePreview(): Promise<Sample | undefined> {
+    return undefined;
+  }
+}
+
 /** More cards than one refill's related-artist limit, for the hot-path test. */
 class BigCatalog extends FixedCatalog {
   override async relatedArtists(): Promise<Card[]> {
@@ -251,12 +302,15 @@ describe('deck refill', () => {
   it('builds a ranked, unseen pool of artist cards from FakeCatalog', async () => {
     const seeds = [ADA, NORTH];
     const taste = initTaste(seeds);
+    // Wildcards are exempt from the score floor and slot separately; this test
+    // is about the plain relevance order.
     const deck = createDeck({
       catalog: new FakeCatalog(),
       seeds,
       cardType: 'artist',
       taste,
       seen: ['dz:artist:5101'],
+      wildcards: false,
     });
 
     const state = await deck.refill();
@@ -811,5 +865,92 @@ describe('deck diversity', () => {
     expect(next.pool[0]).toBeDefined();
     expect(Array.isArray(next.pool)).toBe(true);
     expect(elapsed).toBeLessThan(50);
+  });
+});
+
+describe('deck wildcards', () => {
+  const setup = (wildcards = true, taste = initTaste([ADA, NORTH])) =>
+    createDeck({
+      catalog: new WildcardBranchCatalog(),
+      seeds: [ADA, NORTH],
+      cardType: 'artist',
+      taste,
+      wildcards,
+    });
+
+  const deal = async (deck: ReturnType<typeof createDeck>, count: number): Promise<Card[]> => {
+    const dealt: Card[] = [];
+    while (dealt.length < count && deck.state.pool.length > 0) {
+      const card = deck.state.pool[0];
+      dealt.push(card);
+      // Likes keep the taste (and so the regular pool) stable while dealing.
+      deck.commit({ card, reaction: 'like', elapsedMs: 9000 });
+    }
+    return dealt;
+  };
+
+  it('deals about one in six cards as a wildcard, never two in a row', async () => {
+    const deck = setup();
+    const state = await deck.refill();
+    expect(state.pool.filter((card) => card.wildcard)).toHaveLength(2);
+
+    const dealt = await deal(deck, 12);
+    const wildcards = dealt.map((card, index) => (card.wildcard ? index + 1 : 0)).filter(Boolean);
+
+    // Every 12 dealt cards carry one or two exploration cards (ADR 7).
+    expect(wildcards.length).toBeGreaterThanOrEqual(1);
+    expect(wildcards.length).toBeLessThanOrEqual(2);
+    expect(wildcards).toEqual([6, 12]);
+    for (let index = 1; index < dealt.length; index += 1) {
+      expect(Boolean(dealt[index].wildcard && dealt[index - 1].wildcard)).toBe(false);
+    }
+  });
+
+  it('deals no wildcard and asks the catalog for none when the setting is off', async () => {
+    const catalog = new WildcardBranchCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ADA, NORTH],
+      cardType: 'artist',
+      taste: initTaste([ADA, NORTH]),
+      wildcards: false,
+    });
+
+    const state = await deck.refill();
+    const dealt = await deal(deck, 12);
+
+    expect(state.pool.some((card) => card.wildcard)).toBe(false);
+    expect(dealt.some((card) => card.wildcard)).toBe(false);
+    expect(catalog.searches).toEqual([]);
+  });
+
+  it('drops queued wildcards when turned off mid-session and resumes at the next refill', async () => {
+    const deck = setup();
+    await deck.refill();
+    expect(deck.state.pool.some((card) => card.wildcard)).toBe(true);
+
+    deck.setWildcards(false);
+    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 9000 });
+    expect(swiped.pool.some((card) => card.wildcard)).toBe(false);
+
+    deck.setWildcards(true);
+    const resumed = await deck.refill();
+    expect(resumed.pool.some((card) => card.wildcard)).toBe(true);
+  });
+
+  it('keeps a wildcard below the quality floor, but never deals one already seen', async () => {
+    const taste: TasteWeights = { chips: { electronic: 1, pop: -2 }, creators: {}, origins: {} };
+    const deck = setup(true, taste);
+
+    const state = await deck.refill();
+    const wildcards = state.pool.filter((card) => card.wildcard);
+    expect(wildcards.length).toBeGreaterThan(0);
+    expect(wildcards.every((card) => score(taste, card).score < 0)).toBe(true);
+
+    const dealt = await deal(deck, 12);
+    const seen = new Set(dealt.map((card) => card.key));
+    const again = await deck.refill();
+
+    expect(again.pool.some((card) => card.wildcard && seen.has(card.key))).toBe(false);
   });
 });
