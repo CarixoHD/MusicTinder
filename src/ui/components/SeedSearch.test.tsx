@@ -170,6 +170,12 @@ describe('SeedSearch', () => {
 
     await advance(1);
     expect(catalog.calls.map((call) => call.term)).toEqual(['ad']);
+
+    // Several keystrokes inside one pause are one search, for the latest term.
+    await typeTerm('ada');
+    await typeTerm('adav');
+    await advance(400);
+    expect(catalog.calls.map((call) => call.term)).toEqual(['ad', 'adav']);
   });
 
   it('shows its loading row while the catalog waits, then the results', async () => {
