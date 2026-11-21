@@ -44,12 +44,14 @@
   pointer-events: none;
 }
 
+/* The label sits on the trailing edge: dragging right moves the card right, so
+   the Like badge stays in view. */
 .swipe-label--like {
-  right: var(--space-3);
+  left: var(--space-3);
   color: var(--like);
 }
 
 .swipe-label--skip {
-  left: var(--space-3);
+  right: var(--space-3);
   color: var(--danger);
 }
