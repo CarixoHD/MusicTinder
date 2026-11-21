@@ -98,10 +98,10 @@ test('likes list newest first with title, creator and a fixed 56 px thumb', asyn
     expect(box).toMatchObject({ width: 56, height: 56 });
   }
 
-  // An artist row says what it is instead of repeating the name; both rows
-  // carry type + genre as the secondary line.
+  // An artist row says what it is instead of repeating the name; an album row
+  // names whose album it is.
   await expect(rows.nth(0).locator('.liked-row__creator')).toHaveText('Artist · Electronic');
-  await expect(rows.nth(1).locator('.liked-row__creator')).toHaveText('Album · Electronic');
+  await expect(rows.nth(1).locator('.liked-row__creator')).toHaveText('Album · Ada Vale');
   // One accessible name, not the title repeated by every inner text node.
   await expect(rows.nth(0).locator('.liked-row')).toHaveAttribute(
     'aria-label',
