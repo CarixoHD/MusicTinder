@@ -1,5 +1,7 @@
 import { normalizeGenre } from '../chips';
 import { CatalogError, type Chip, type SeedCandidate } from '../types';
+import { withItunesBudget } from './budget';
+import { cached } from './cache';
 
 const SEARCH_URL = 'https://itunes.apple.com/search';
 const SEED_LIMIT = 8;
@@ -45,10 +47,30 @@ function toCandidate(item: unknown, type: 'artist' | 'album'): SeedCandidate | n
   };
 }
 
+async function fetchSearch(url: URL, term: string): Promise<SeedCandidate[]> {
+  let body: unknown;
+  try {
+    const response = await fetch(url);
+    // Apple answers an exhausted per-IP budget with 403 or 429.
+    if (response.status === 403 || response.status === 429) {
+      throw new CatalogError('rate', `iTunes rate limit reached (${response.status})`);
+    }
+    if (!response.ok) throw new Error(`iTunes search answered ${response.status}`);
+    body = await response.json();
+  } catch (error) {
+    if (error instanceof CatalogError) throw error;
+    throw new CatalogError('network', `Could not search the catalog for "${term}"`);
+  }
+
+  const results = isRecord(body) && Array.isArray(body.results) ? body.results : [];
+  return results;
+}
+
 /**
- * Artist/album seed search against the iTunes Search API (CORS `*`, 24 h cache).
- * Any transport or status failure surfaces as a typed network CatalogError so
- * Setup can offer an inline retry.
+ * Artist/album seed search against the iTunes Search API (CORS `*`).
+ * Responses are cached for 24 h and every request spends one token from the
+ * shared budget; with no token left the search fails fast as a rate error so
+ * Setup can say Apple is limiting searches instead of "no match".
  */
 export async function searchSeeds(
   term: string,
@@ -60,17 +82,14 @@ export async function searchSeeds(
   url.searchParams.set('entity', type === 'artist' ? 'musicArtist' : 'album');
   url.searchParams.set('limit', String(SEED_LIMIT));
 
-  let body: unknown;
-  try {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`iTunes search answered ${response.status}`);
-    body = await response.json();
-  } catch {
-    throw new CatalogError('network', `Could not search the catalog for "${term.trim()}"`);
-  }
-
-  const results = isRecord(body) && Array.isArray(body.results) ? body.results : [];
-  return results
-    .map((item) => toCandidate(item, type))
-    .filter((candidate): candidate is SeedCandidate => candidate !== null);
+  const candidates = await cached(url.toString(), () =>
+    withItunesBudget<SeedCandidate[] | null>(null, async () => {
+      const results = await fetchSearch(url, term.trim());
+      return results
+        .map((item) => toCandidate(item, type))
+        .filter((candidate): candidate is SeedCandidate => candidate !== null);
+    }),
+  );
+  if (candidates === null) throw new CatalogError('rate', 'iTunes search is cooling down');
+  return candidates;
 }
