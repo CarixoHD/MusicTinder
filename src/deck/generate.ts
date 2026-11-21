@@ -1,9 +1,14 @@
-import { CatalogError, type Card, type CardKind, type Catalog, type Seed } from '../types';
+import { CHIPS } from '../chips';
+import { CatalogError, type Card, type CardKind, type Catalog, type Chip, type Seed } from '../types';
 
 const RELATED_LIMIT = 20;
 const GENRE_ANCHOR_LIMIT = 3;
 const ALBUM_LIMIT = 3;
 const TRACK_LIMIT = 3;
+/** Exploration is a small share of a refill, not a second deck. */
+export const WILDCARD_CARDS = 2;
+/** The most iTunes enrichments a refill may spend looking for wildcards. */
+export const WILDCARD_ENRICH_LIMIT = 2;
 /** Liked artists are extra anchors, but seeds must keep the bulk of the iTunes budget. */
 export const LIKED_ANCHOR_LIMIT = 2;
 /**
@@ -37,6 +42,10 @@ export interface GenerateOptions {
    * cards in hand, never waits.
    */
   waitForFirstCard?: boolean;
+  /** Generate exploration cards outside the listener's top chips. */
+  wildcards?: boolean;
+  /** The listener's strongest taste chips: a wildcard's chips stay outside these. */
+  topChips?: readonly Chip[];
 }
 
 /**
@@ -213,6 +222,91 @@ export async function generateCandidates(
     return enrichment && enrichment.chips.length > 0 ? { ...card, chips: enrichment.chips } : undefined;
   };
 
+  const loadReleases = (itunesArtistId: number, waitForBudget: boolean): Promise<Card[]> =>
+    cardType === 'album'
+      ? catalog.artistAlbums(itunesArtistId, ALBUM_LIMIT, { waitForBudget })
+      : catalog.artistTopTracks(itunesArtistId, TRACK_LIMIT, { waitForBudget });
+
+  const outside = (chips: readonly Chip[]): boolean =>
+    chips.length > 0 && chips.every((chip) => !(options.topChips ?? []).includes(chip));
+
+  /**
+   * Mix a couple of exploration cards into the refill: unseen, outside the
+   * listener's top chips, from the least-represented seed branch or from a
+   * genre search on a curated chip they have not picked. A genre search may
+   * spend at most WILDCARD_ENRICH_LIMIT enrichments; branch cards were already
+   * enriched with the rest of the pool, so they cost nothing extra. Off means
+   * no wildcard request at all.
+   */
+  const withWildcards = async (regular: Card[]): Promise<Card[]> => {
+    if (options.wildcards !== true || (options.topChips ?? []).length === 0) return regular;
+
+    const found: Card[] = [];
+    const taken = new Set<string>();
+
+    // 1. A genre search on a curated chip the listener has not picked. The
+    //    rotation keeps successive refills exploring different chips.
+    const seedChips = new Set(seeds.flatMap((seed) => seed.chips));
+    const unpicked = CHIPS.filter(
+      (chip) => !seedChips.has(chip.id) && !(options.topChips ?? []).includes(chip.id),
+    );
+    let spent = 0;
+    if (unpicked.length > 0) {
+      const chip = unpicked[seenKeys.size % unpicked.length];
+      const hits = (await attempt(() => catalog.searchSeeds(chip.label, 'artist'))) ?? [];
+      for (const hit of hits) {
+        if (spent >= WILDCARD_ENRICH_LIMIT || found.length >= WILDCARD_CARDS) break;
+        const creatorKey = (hit.creator || hit.name).trim().toLowerCase();
+        const key =
+          hit.itunesId !== undefined
+            ? `it:artist:${hit.itunesId}`
+            : `dz:artist:${hit.deezerArtistId ?? creatorKey}`;
+        // A genre search that already shows a picked chip saves the enrichment.
+        if (!outside(hit.chips) && hit.chips.length > 0) continue;
+        if (!hit.image || seenKeys.has(key) || excluded.has(creatorKey) || options.poolCreatorKeys?.has(creatorKey)) {
+          continue;
+        }
+        spent += 1;
+        const enrichment = await attempt(() => catalog.enrichArtist(hit.name, { waitForBudget: false }));
+        if (!enrichment || !outside(enrichment.chips)) continue;
+        if (cardType === 'artist') {
+          found.push({
+            key,
+            kind: 'artist',
+            source: hit.itunesId !== undefined ? 'itunes' : 'deezer',
+            title: hit.name,
+            creator: hit.creator || hit.name,
+            creatorKey,
+            image: hit.image,
+            chips: enrichment.chips,
+            related: [],
+            wildcard: true,
+          });
+          continue;
+        }
+        const releases = await attempt(() => loadReleases(enrichment.itunesArtistId, false));
+        const release = (releases ?? []).find(
+          (card) => card.kind === cardType && !seenKeys.has(card.key) && !excluded.has(card.creatorKey),
+        );
+        if (release) found.push({ ...release, chips: enrichment.chips, related: [], wildcard: true });
+      }
+    }
+
+    // 2. The least-represented seed branch: a related artist outside the top
+    //    chips. These were enriched anyway, so this costs no extra token.
+    if (found.length < WILDCARD_CARDS && perAnchor.length > 0) {
+      const least = [...perAnchor].sort((a, b) => a.cards.length - b.cards.length)[0];
+      for (const card of regular) {
+        if (found.length >= WILDCARD_CARDS) break;
+        if (!card.related?.includes(least.anchorKey) || !outside(card.chips)) continue;
+        found.push({ ...card, wildcard: true, because: undefined });
+        taken.add(card.key);
+      }
+    }
+
+    return [...regular.filter((card) => !taken.has(card.key)), ...found];
+  };
+
   // 4a. Artist cards: Deezer carries no genre, so iTunes supplies it. Every
   //     card needs one: an artist without chips has no ranking signal and no
   //     card content. An artist iTunes could not tag stays unseen, and a later
@@ -233,16 +327,11 @@ export async function generateCandidates(
       }
     }
     const rest = await Promise.all(artists.slice(index).map((card) => enrichCard(card, false)));
-    return finish([...tagged, ...rest.filter((card): card is Card => card !== undefined)]);
+    return finish(await withWildcards([...tagged, ...rest.filter((card): card is Card => card !== undefined)]));
   }
 
   // 4b. Album/song cards: enrich each related artist, then pull its releases,
   //     carrying the anchor keys and the artist's chips onto every card.
-  const loadReleases = (itunesArtistId: number, waitForBudget: boolean): Promise<Card[]> =>
-    cardType === 'album'
-      ? catalog.artistAlbums(itunesArtistId, ALBUM_LIMIT, { waitForBudget })
-      : catalog.artistTopTracks(itunesArtistId, TRACK_LIMIT, { waitForBudget });
-
   const cards: Card[] = [];
   const included = new Set<string>();
   for (const [index, artistCard] of artists.entries()) {
@@ -262,5 +351,5 @@ export async function generateCandidates(
     }
   }
 
-  return finish(cards);
+  return finish(await withWildcards(cards));
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CHIPS } from '../chips';
 import { FakeCatalog } from '../testkit/fakeCatalog';
 import {
   CatalogError,
@@ -7,8 +8,14 @@ import {
   type Chip,
   type LookupOptions,
   type Seed,
+  type SeedCandidate,
 } from '../types';
-import { generateCandidates, LIKED_ANCHOR_LIMIT, WAIT_ARTIST_LIMIT } from './generate';
+import {
+  generateCandidates,
+  LIKED_ANCHOR_LIMIT,
+  WAIT_ARTIST_LIMIT,
+  WILDCARD_ENRICH_LIMIT,
+} from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
   {
@@ -360,6 +367,71 @@ class CoolingUntaggableCatalog extends DeeperCatalog {
     this.enrichWaits.push(wait);
     if (!wait) throw new CatalogError('budget', 'iTunes is cooling down');
     return null;
+  }
+}
+
+const TOP_CHIPS: Chip[] = ['electronic', 'ambient', 'indie'];
+
+/** Artists a genre-chip search can find, all outside the listener's top chips. */
+const WILDCARD_HITS: SeedCandidate[] = Array.from({ length: 5 }, (_, index) => ({
+  itunesId: 8500 + index,
+  kind: 'artist' as const,
+  name: `Outside Act ${index + 1}`,
+  creator: `Outside Act ${index + 1}`,
+  image: `https://cdn.example.test/artists/${8500 + index}.jpg`,
+  chips: ['jazz'] as Chip[],
+}));
+
+/**
+ * Answers a genre-chip search with outside artists and counts the iTunes
+ * enrichment each one costs, so wildcard spending is observable.
+ */
+class WildcardCatalog extends FakeCatalog {
+  readonly searches: string[] = [];
+  readonly wildcardEnrichments: string[] = [];
+
+  constructor(private readonly hits: SeedCandidate[] = WILDCARD_HITS) {
+    super();
+  }
+
+  override async searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]> {
+    this.searches.push(term);
+    if (type !== 'artist') return super.searchSeeds(term, type);
+    return this.hits;
+  }
+
+  override async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+    const hit = this.hits.find((candidate) => candidate.name.toLowerCase() === name.trim().toLowerCase());
+    if (hit) {
+      this.wildcardEnrichments.push(hit.name);
+      return { itunesArtistId: hit.itunesId ?? 0, chips: hit.chips };
+    }
+    return super.enrichArtist(name);
+  }
+
+  override async artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+    const hit = this.hits.find((candidate) => candidate.itunesId === itunesArtistId);
+    if (!hit) return super.artistAlbums(itunesArtistId, limit);
+    return [1, 2].slice(0, limit).map((n) => this.release(hit, `it:album:${itunesArtistId}${n}`, 'album', n));
+  }
+
+  override async artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
+    const hit = this.hits.find((candidate) => candidate.itunesId === itunesArtistId);
+    if (!hit) return super.artistTopTracks(itunesArtistId, limit);
+    return [1, 2].slice(0, limit).map((n) => this.release(hit, `it:track:${itunesArtistId}${n}`, 'song', n));
+  }
+
+  private release(hit: SeedCandidate, key: string, kind: Card['kind'], n: number): Card {
+    return {
+      key,
+      kind,
+      source: 'itunes',
+      title: `${hit.name} ${kind} ${n}`,
+      creator: hit.name,
+      creatorKey: hit.name.toLowerCase(),
+      chips: hit.chips,
+      image: `https://cdn.example.test/${key}.jpg`,
+    };
   }
 }
 
@@ -783,5 +855,85 @@ describe('generateCandidates', () => {
 
     expect(catalog.enriched).not.toContain('a one');
     expect(cards.some((card) => card.creatorKey === 'a one')).toBe(false);
+  });
+
+  describe('wildcards', () => {
+    it('flags outside-chip candidates and searches a curated chip the listener has not picked', async () => {
+      const catalog = new WildcardCatalog();
+      const seedChips = new Set(ARTIST_SEEDS.flatMap((seed) => seed.chips));
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      const wildcards = cards.filter((card) => card.wildcard);
+      expect(wildcards.length).toBeGreaterThan(0);
+      expect(wildcards.every((card) => card.image !== undefined && card.chips.length > 0)).toBe(true);
+      expect(wildcards.every((card) => card.chips.every((chip) => !TOP_CHIPS.includes(chip)))).toBe(true);
+      // The regular deck is still there.
+      expect(cards.some((card) => !card.wildcard)).toBe(true);
+
+      const searched = catalog.searches.map((term) => CHIPS.find((chip) => chip.label === term));
+      expect(searched.length).toBeGreaterThan(0);
+      expect(
+        searched.every((chip) => chip !== undefined && !seedChips.has(chip.id) && !TOP_CHIPS.includes(chip.id)),
+      ).toBe(true);
+    });
+
+    it('requests no wildcard candidates when the setting is off', async () => {
+      const catalog = new WildcardCatalog();
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: false,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(cards.some((card) => card.wildcard)).toBe(false);
+      expect(catalog.searches).toEqual([]);
+      expect(catalog.wildcardEnrichments).toEqual([]);
+    });
+
+    it('spends at most WILDCARD_ENRICH_LIMIT iTunes enrichments per refill', async () => {
+      const catalog = new WildcardCatalog();
+
+      await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(catalog.wildcardEnrichments.length).toBeLessThanOrEqual(WILDCARD_ENRICH_LIMIT);
+    });
+
+    it('never deals a wildcard the listener has already seen', async () => {
+      const catalog = new WildcardCatalog();
+      const seen = new Set([`it:artist:${WILDCARD_HITS[0].itunesId}`]);
+
+      const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', seen, {
+        wildcards: true,
+        topChips: TOP_CHIPS,
+      });
+
+      expect(cards.some((card) => card.key === `it:artist:${WILDCARD_HITS[0].itunesId}`)).toBe(false);
+      expect(cards.every((card) => !seen.has(card.key))).toBe(true);
+    });
+
+    it.each(['album', 'song'] as const)(
+      'deals wildcard %s cards with artwork and chips from the same enrichment',
+      async (cardType) => {
+        const catalog = new WildcardCatalog();
+
+        const cards = await generateCandidates(catalog, ARTIST_SEEDS, cardType, new Set(), {
+          wildcards: true,
+          topChips: TOP_CHIPS,
+        });
+
+        const wildcards = cards.filter((card) => card.wildcard);
+        expect(wildcards.length).toBeGreaterThan(0);
+        expect(wildcards.every((card) => card.kind === cardType)).toBe(true);
+        expect(wildcards.every((card) => card.image !== undefined && card.chips.length > 0)).toBe(true);
+        expect(wildcards.every((card) => card.chips.every((chip) => !TOP_CHIPS.includes(chip)))).toBe(true);
+      },
+    );
   });
 });
