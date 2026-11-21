@@ -216,6 +216,40 @@ describe('deck refill', () => {
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
   });
+
+  it('keeps the cards in hand after a background refill fails and asks to try again', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    catalog.failing = false;
+    const dealt = await deck.refill();
+    expect(dealt.status).toBe('dealing');
+
+    catalog.failing = true;
+    const stalled = await deck.refill();
+
+    expect(stalled.status).toBe('stalled');
+    expect(stalled.pool).toEqual(dealt.pool);
+    // There are still cards to swipe, so a later swipe must be able to retry
+    // the catalog instead of the deck staying stalled forever.
+    expect(deck.shouldRefill()).toBe(true);
+
+    while (deck.state.pool.length > 0) {
+      deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    }
+    // Running out of cards while the catalog is down is still a catalog
+    // failure, never the deck-end copy that blames the seeds.
+    expect(deck.state.status).toBe('stalled');
+
+    catalog.failing = false;
+    const recovered = await deck.refill();
+    // A successful refill clears the failure; the deck really is exhausted now.
+    expect(recovered.status).toBe('empty');
+  });
 });
 
 describe('deck commit', () => {

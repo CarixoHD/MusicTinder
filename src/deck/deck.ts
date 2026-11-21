@@ -145,8 +145,10 @@ export function createDeck(init: DeckInit): Deck {
     state = {
       ...state,
       pool,
-      // A failed refill stays flagged through swipes; only a refill clears it.
-      status: pool.length > 0 ? (state.status === 'stalled' ? 'stalled' : 'dealing') : 'empty',
+      // A failed refill stays flagged through swipes, even once its cards run
+      // out: only a successful refill clears it. Otherwise the deck-end copy
+      // would blame the seeds while the catalog is the thing that is down.
+      status: state.status === 'stalled' ? 'stalled' : pool.length > 0 ? 'dealing' : 'empty',
       taste,
       swipes: state.swipes + 1,
     };
@@ -162,7 +164,8 @@ export function createDeck(init: DeckInit): Deck {
     prefetchQueue: (current = state) => current.pool.slice(1, 1 + PREFETCH_AHEAD),
     shouldRefill: () =>
       pending === null &&
-      state.status !== 'stalled' &&
-      (state.swipes >= REFILL_EVERY || state.pool.length < MIN_POOL),
+      (state.status === 'stalled' ||
+        state.swipes >= REFILL_EVERY ||
+        state.pool.length < MIN_POOL),
   };
 }
