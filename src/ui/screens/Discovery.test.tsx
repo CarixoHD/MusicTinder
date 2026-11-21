@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { initTaste } from '../../taste/taste';
 import { useStore } from '../../store/store';
 import { FakeCatalog } from '../../testkit/fakeCatalog';
 import type { Chip } from '../../types';
@@ -33,6 +34,12 @@ const currentTitle = (): string => {
   const element = container.querySelector<HTMLElement>('.deck__current .card__title');
   if (!element) throw new Error('no current card rendered');
   return element.textContent ?? '';
+};
+
+const click = (selector: string): void => {
+  const button = container.querySelector<HTMLButtonElement>(selector);
+  if (!button) throw new Error(`no ${selector} rendered`);
+  act(() => button.click());
 };
 
 const mount = async (): Promise<void> => {
@@ -97,5 +104,33 @@ describe('Discovery deck session', () => {
     expect(currentTitle()).toBe(title);
     expect(related.mock.calls.length).toBe(relatedCalls);
     expect(enrich.mock.calls.length).toBe(enrichCalls);
+  });
+
+  it('drops the session deck and its taste when resetAll() wipes the data', async () => {
+    await mount();
+    await flush();
+    const firstCard = currentTitle();
+    click('.deck-action--like');
+    click('.deck-action--like');
+    await flush();
+    expect(currentTitle()).not.toBe(firstCard);
+    const preReset = useStore.getState().taste;
+    expect(preReset).not.toEqual(initTaste([{ ...SEED, chips: [...SEED.chips] }]));
+
+    // Delete everything, then pick the same seed again: seed ids are stable, so
+    // the old deck's key would still match and resurrect its taste and seen set.
+    act(() => useStore.getState().resetAll());
+    act(() => useStore.getState().addSeed({ ...SEED, chips: [...SEED.chips] }));
+    act(() => useStore.getState().setScreen('discovery'));
+    unmount();
+    await mount();
+    await flush();
+
+    expect(currentTitle()).toBe(firstCard);
+    expect(useStore.getState().taste).toEqual(initTaste([{ ...SEED, chips: [...SEED.chips] }]));
+    const persisted = JSON.parse(localStorage.getItem('mt:v1') ?? 'null') as {
+      state: { taste: unknown };
+    };
+    expect(persisted.state.taste).toEqual(initTaste([{ ...SEED, chips: [...SEED.chips] }]));
   });
 });

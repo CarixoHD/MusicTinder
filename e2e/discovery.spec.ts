@@ -29,12 +29,16 @@ interface StoredState {
 interface SeedOptions {
   cardType?: 'artist' | 'album' | 'song';
   seen?: string[];
+  seed?: typeof SEED;
 }
 
-async function seedDeck(page: Page, { cardType = 'artist', seen = [] }: SeedOptions = {}): Promise<void> {
+async function seedDeck(
+  page: Page,
+  { cardType = 'artist', seen = [], seed = SEED }: SeedOptions = {},
+): Promise<void> {
   const persisted = {
     state: {
-      seeds: [SEED],
+      seeds: [seed],
       settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType },
       taste: { chips: {}, creators: {}, origins: {} },
       liked: [],
@@ -144,4 +148,43 @@ test('ends quietly when nothing unseen is left and Change seeds returns to Setup
   await page.getByRole('button', { name: 'Change seeds' }).click();
 
   await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
+});
+
+test('Reset drops the session deck: picking the same seed again deals from the top with seed-only taste', async ({
+  page,
+}) => {
+  // The seed uses the id Setup stores for a search pick, so picking Ada Vale
+  // again after the wipe recreates exactly the same session key.
+  await seedDeck(page, { seed: { ...SEED, id: 'it:artist:9101', chips: ['electronic'] } });
+  await page.goto('/');
+  await expect(deckTitle(page)).toHaveText(/\S/);
+  const first = await deckTitle(page).innerText();
+
+  await page.getByRole('button', { name: 'Like', exact: true }).click();
+  await expect(deckTitle(page)).not.toHaveText(first);
+  const second = await deckTitle(page).innerText();
+  await page.getByRole('button', { name: 'Like', exact: true }).click();
+  await expect(deckTitle(page)).not.toHaveText(second);
+  expect(Object.keys((await stored(page))?.taste.creators ?? {})).toContain('glass harbour');
+
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('button', { name: 'Settings', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', { name: 'Settings' });
+  await dialog.getByRole('button', { name: 'Reset all my data' }).click();
+  await dialog.getByRole('button', { name: 'Delete everything' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
+
+  await page.getByRole('searchbox', { name: 'Search artists' }).fill('ada');
+  await page.getByRole('button', { name: /Ada Vale/ }).click();
+  await page.getByRole('button', { name: 'Start discovering' }).click();
+
+  // The first card is dealt again and the taste is only what the seed implies.
+  await expect(deckTitle(page)).toHaveText(first);
+  expect((await stored(page))?.taste).toEqual({
+    chips: { electronic: 0.5 },
+    creators: { 'ada vale': 0.5 },
+    origins: { electronic: 'Ada Vale', 'ada vale': 'Ada Vale' },
+  });
 });

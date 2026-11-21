@@ -17,12 +17,13 @@ const tasteIsEmpty = (taste: TasteWeights) =>
 
 // The deck outlives the Discovery screen: peeking at Liked and coming back is
 // normal use and must return to the same card. A session-level deck keeps the
-// pool (and its dealt-behind cards) in memory; switching seeds or card type
-// builds a new one. Never persisted — a reload starts a fresh session.
+// pool (and its dealt-behind cards) in memory; switching seeds, card type or
+// wiping the data (sessionEpoch) builds a new one. Never persisted — a reload
+// starts a fresh session.
 let session: { key: string; catalog: Catalog | null; deck: Deck } | null = null;
 
-const sessionKey = (seeds: Seed[], cardType: CardKind): string =>
-  `${cardType}|${seeds.map((seed) => `${seed.kind}:${seed.id}:${seed.name}`).join('|')}`;
+const sessionKey = (seeds: Seed[], cardType: CardKind, epoch: number): string =>
+  `${epoch}|${cardType}|${seeds.map((seed) => `${seed.kind}:${seed.id}:${seed.name}`).join('|')}`;
 
 function LikeIcon() {
   return (
@@ -77,7 +78,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   // finds the same pool instead of re-dealing from the catalog.
   const [catalog] = useState(() => injected ?? createCatalog());
   const [deck] = useState(() => {
-    const key = sessionKey(seeds, cardType);
+    const key = sessionKey(seeds, cardType, useStore.getState().sessionEpoch);
     if (session && session.key === key && session.catalog === (injected ?? null)) return session.deck;
     const deck = createDeck({
       catalog,
@@ -90,6 +91,9 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     session = { key, catalog: injected ?? null, deck };
     return deck;
   });
+  // The deck belongs to the epoch it was built in; after a wipe its taste must
+  // never flow back into the emptied store.
+  const deckEpoch = useRef(useStore.getState().sessionEpoch).current;
   const [state, setState] = useState<DeckState>(deck.state);
   const [loading, setLoading] = useState(() => deck.state.status === 'dealing' && !deck.state.pool.length);
   // Previews resolved for cards the catalog ships silent, keyed by card key.
@@ -129,8 +133,9 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   // Entering with an empty taste derives it from the seeds once, so ranking is
   // meaningful and a reload keeps the same starting point.
   useEffect(() => {
+    if (useStore.getState().sessionEpoch !== deckEpoch) return;
     if (tasteIsEmpty(taste) && seeds.length > 0) setTaste(deck.state.taste);
-  }, [deck, seeds.length, setTaste, taste]);
+  }, [deck, deckEpoch, seeds.length, setTaste, taste]);
 
   useEffect(() => {
     // Only a deck that has never been dealt (this mount or a previous visit)
