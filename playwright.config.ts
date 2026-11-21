@@ -1,5 +1,5 @@
-import { defineConfig, devices } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import { defineConfig, devices } from '@playwright/test';
 
 // Parallel worktrees share one sandbox and each runs its own dev server.
 // Derive a stable per-worktree port so they never collide on 5173; PORT wins.

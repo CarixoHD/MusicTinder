@@ -162,12 +162,49 @@ function deezerRelated(deezerArtistId: number): unknown {
   };
 }
 
+// Related artists reachable from a seed anchor only become album/song cards
+// after iTunes resolves them, which the base fixture does not model.
+const RELATED_RELEASES: Readonly<Record<string, { itunesId: number; genre: string }>> = {
+  'Glass Harbour': { itunesId: 7101, genre: 'Electronic' },
+  'Slow Machines': { itunesId: 7102, genre: 'Electronic' },
+  'Neon Field': { itunesId: 7103, genre: 'Dance' },
+  'Paper Satellites': { itunesId: 7104, genre: 'Ambient' },
+  'Low Atlas': { itunesId: 7107, genre: 'Indie' },
+};
+
+const relatedArtistResult = (name: string, release: { itunesId: number; genre: string }) => ({
+  wrapperType: 'artist',
+  artistType: 'Artist',
+  artistId: release.itunesId,
+  artistName: name,
+  primaryGenreName: release.genre,
+});
+
+const relatedAlbumResult = (name: string, release: { itunesId: number; genre: string }) => ({
+  wrapperType: 'collection',
+  collectionType: 'Album',
+  collectionId: release.itunesId * 10 + 1,
+  collectionName: `${name} No. 1`,
+  artistId: release.itunesId,
+  artistName: name,
+  primaryGenreName: release.genre,
+  releaseDate: '2022-01-01T00:00:00Z',
+  artworkUrl100: artwork(release.itunesId),
+  collectionViewUrl: `https://music.apple.com/album/${release.itunesId * 10 + 1}`,
+});
+
 export interface MockCatalogOptions {
   /**
    * Adjust one iTunes /search request before it is answered: delay it (to force
-   * out-of-order responses) or fail it once (to exercise the retry row).
+   * out-of-order responses), fail it once (to exercise the retry row), or answer
+   * with a status such as 429 to exercise the rate-limit copy.
    */
-  search?: (params: URLSearchParams, call: number) => { delayMs?: number; fail?: boolean } | void;
+  search?: (
+    params: URLSearchParams,
+    call: number,
+  ) => { delayMs?: number; fail?: boolean; status?: number } | void;
+  /** Also answer iTunes enrichment/album lookups for the anchors' related artists. */
+  enrichRelatedArtists?: boolean;
 }
 
 /**
@@ -186,6 +223,10 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       if (outcome?.delayMs) await new Promise((resolve) => setTimeout(resolve, outcome.delayMs));
       if (outcome?.fail) {
         await route.abort('failed');
+        return;
+      }
+      if (outcome?.status) {
+        await route.fulfill({ status: outcome.status, body: '' });
         return;
       }
       payload = itunesSearch(url.searchParams);
@@ -221,4 +262,35 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       body: `${callback}(${JSON.stringify(payload)});`,
     });
   });
+
+  // Registered last so it answers related-artist requests first; everything
+  // else falls through to the routes above.
+  if (options.enrichRelatedArtists) {
+    await page.route('https://itunes.apple.com/**', async (route) => {
+      const url = new URL(route.request().url());
+      const json = (payload: unknown) =>
+        route.fulfill({
+          status: 200,
+          headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+          body: JSON.stringify(payload),
+        });
+
+      const name = url.searchParams.get('term') ?? '';
+      const release = RELATED_RELEASES[name];
+      if (url.pathname === '/search' && release) {
+        await json({ resultCount: 1, results: [relatedArtistResult(name, release)] });
+        return;
+      }
+
+      const album = Object.entries(RELATED_RELEASES).find(
+        ([, item]) => item.itunesId === Number(url.searchParams.get('id')),
+      );
+      if (url.pathname === '/lookup' && url.searchParams.get('entity') === 'album' && album) {
+        await json({ resultCount: 1, results: [relatedAlbumResult(album[0], album[1])] });
+        return;
+      }
+
+      await route.fallback();
+    });
+  }
 }
