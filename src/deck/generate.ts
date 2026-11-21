@@ -25,6 +25,12 @@ export interface GenerateOptions {
   likedAnchors?: readonly LikedAnchor[];
   /** creatorKeys already in the deck pool: enriching them again would waste budget. */
   poolCreatorKeys?: ReadonlySet<string>;
+  /**
+   * The deck has no cards: the first card's lookups may wait out the app's own
+   * iTunes cool-down instead of rejecting the refill. A background refill, with
+   * cards in hand, never waits.
+   */
+  waitForFirstCard?: boolean;
 }
 
 /**
@@ -196,8 +202,9 @@ export async function generateCandidates(
   //     refill retries it.
   if (cardType === 'artist') {
     const tagged = await Promise.all(
-      artists.map(async (card): Promise<Card | undefined> => {
-        const enrichment = await attempt(() => catalog.enrichArtist(card.creator));
+      artists.map(async (card, index): Promise<Card | undefined> => {
+        const waitForBudget = options.waitForFirstCard === true && index === 0;
+        const enrichment = await attempt(() => catalog.enrichArtist(card.creator, { waitForBudget }));
         return enrichment && enrichment.chips.length > 0
           ? { ...card, chips: enrichment.chips }
           : undefined;
@@ -208,18 +215,19 @@ export async function generateCandidates(
 
   // 4b. Album/song cards: enrich each related artist, then pull its releases,
   //     carrying the anchor keys and the artist's chips onto every card.
-  const loadReleases = (itunesArtistId: number): Promise<Card[]> =>
+  const loadReleases = (itunesArtistId: number, waitForBudget: boolean): Promise<Card[]> =>
     cardType === 'album'
-      ? catalog.artistAlbums(itunesArtistId, ALBUM_LIMIT)
-      : catalog.artistTopTracks(itunesArtistId, TRACK_LIMIT);
+      ? catalog.artistAlbums(itunesArtistId, ALBUM_LIMIT, { waitForBudget })
+      : catalog.artistTopTracks(itunesArtistId, TRACK_LIMIT, { waitForBudget });
 
   const cards: Card[] = [];
   const included = new Set<string>();
-  for (const artistCard of artists) {
-    const enrichment = await attempt(() => catalog.enrichArtist(artistCard.creator));
+  for (const [index, artistCard] of artists.entries()) {
+    const waitForBudget = options.waitForFirstCard === true && index === 0;
+    const enrichment = await attempt(() => catalog.enrichArtist(artistCard.creator, { waitForBudget }));
     if (!enrichment) continue;
     const chips = enrichment.chips.length > 0 ? enrichment.chips : artistCard.chips;
-    const releases = await attempt(() => loadReleases(enrichment.itunesArtistId));
+    const releases = await attempt(() => loadReleases(enrichment.itunesArtistId, waitForBudget));
     for (const card of releases ?? []) {
       if (card.kind !== cardType || seenKeys.has(card.key) || included.has(card.key)) continue;
       if (excluded.has(card.creatorKey)) continue;

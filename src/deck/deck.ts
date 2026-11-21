@@ -117,6 +117,9 @@ export function createDeck(init: DeckInit): Deck {
         const generated = await generateCandidates(init.catalog, init.seeds, init.cardType, seen, {
           likedAnchors,
           poolCreatorKeys: new Set(state.pool.map((card) => card.creatorKey)),
+          // A deck with nothing to deal waits out the app's own iTunes
+          // cool-down instead of reporting the catalog as unreachable.
+          waitForFirstCard: state.pool.length === 0,
         });
         const pool = ranked(state.taste, [...state.pool, ...generated]);
         state = {

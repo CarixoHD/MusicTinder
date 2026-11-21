@@ -1,5 +1,5 @@
 import { normalizeGenre } from '../chips';
-import { CatalogError, type Card, type Chip, type SampleOptions } from '../types';
+import { CatalogError, type Card, type Chip, type LookupOptions, type SampleOptions } from '../types';
 import { withItunesBudget, type BudgetOptions } from './budget';
 import { cached } from './cache';
 
@@ -123,10 +123,13 @@ const COOLING_DOWN = 'iTunes is cooling down';
  */
 const SAMPLE_RESERVE = 2;
 
-export async function enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+export async function enrichArtist(
+  name: string,
+  options: LookupOptions = {},
+): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
   const results = await lookupResults(
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
-    { reserve: SAMPLE_RESERVE },
+    { reserve: SAMPLE_RESERVE, wait: options.waitForBudget },
   );
   if (results === null) throw new CatalogError('budget', COOLING_DOWN);
 
@@ -146,8 +149,14 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
   return bestId === null ? null : { itunesArtistId: bestId, chips: bestChips };
 }
 
-export async function artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
-  const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`);
+export async function artistTopTracks(
+  itunesArtistId: number,
+  limit: number,
+  options: LookupOptions = {},
+): Promise<Card[]> {
+  const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`, {
+    wait: options.waitForBudget,
+  });
   if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
@@ -173,10 +182,14 @@ export async function artistTopTracks(itunesArtistId: number, limit: number): Pr
     );
 }
 
-export async function artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+export async function artistAlbums(
+  itunesArtistId: number,
+  limit: number,
+  options: LookupOptions = {},
+): Promise<Card[]> {
   const results = await lookupResults(
     `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
-    { reserve: SAMPLE_RESERVE },
+    { reserve: SAMPLE_RESERVE, wait: options.waitForBudget },
   );
   if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
