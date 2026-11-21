@@ -136,6 +136,13 @@ class FailingEnrichmentCatalog extends DeeperCatalog {
   }
 }
 
+/** Related artists resolve, but every release lookup fails: a partial outage. */
+class FailingReleasesCatalog extends DeeperCatalog {
+  override async artistAlbums(): Promise<Card[]> {
+    throw new CatalogError('network', 'offline');
+  }
+}
+
 const failingCatalog = (): Catalog => {
   const fail = async (): Promise<never> => {
     throw new CatalogError('network', 'offline');
@@ -248,5 +255,11 @@ describe('generateCandidates', () => {
     await expect(generateCandidates(failingCatalog(), ARTIST_SEEDS, 'artist', new Set())).rejects.toBeInstanceOf(
       CatalogError,
     );
+  });
+
+  it('rejects when catalog failures leave nothing to deal, instead of reporting a dry deck', async () => {
+    await expect(
+      generateCandidates(new FailingReleasesCatalog(), ARTIST_SEEDS, 'album', new Set()),
+    ).rejects.toBeInstanceOf(CatalogError);
   });
 });

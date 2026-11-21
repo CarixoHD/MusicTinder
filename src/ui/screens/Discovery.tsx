@@ -98,6 +98,10 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   }, []);
 
   const refill = useCallback(() => {
+    // A refill in flight is not the deck's end: an in-hand deck that runs out
+    // while a refill is pending shows the "getting ready" state, not "that's
+    // everything", until the refill answers.
+    setLoading(true);
     deck.refill().then((next) => {
       setState(next);
       setLoading(false);
@@ -204,17 +208,6 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const current = state.pool[0];
 
   if (!current) {
-    if (loading && state.status !== 'stalled') {
-      return (
-        <section className="screen screen--empty" aria-labelledby="discovery-loading-title">
-          <h1 id="discovery-loading-title" className="screen__title">
-            Your deck is getting ready
-          </h1>
-          <p className="screen__body">Finding artists near your seeds.</p>
-        </section>
-      );
-    }
-
     if (state.status === 'stalled' || state.emptyReason === 'no-candidates') {
       return (
         <section className="screen screen--empty" aria-labelledby="discovery-title">
@@ -225,6 +218,18 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
             onRetry={freshDeck}
             onChangeSeeds={() => withTransition(() => setScreen('setup'))}
           />
+        </section>
+      );
+    }
+
+    // A refill in flight (the deck is still 'dealing') is not the deck's end.
+    if (loading || state.status === 'dealing') {
+      return (
+        <section className="screen screen--empty" aria-labelledby="discovery-loading-title">
+          <h1 id="discovery-loading-title" className="screen__title">
+            Your deck is getting ready
+          </h1>
+          <p className="screen__body">Finding artists near your seeds.</p>
         </section>
       );
     }
