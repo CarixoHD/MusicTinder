@@ -30,3 +30,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) Layout fixes that promise 'the same size on every card' should be tested by swiping several cards with different text lengths and comparing sizes, not by measuring the first card alone.
 - (milestone review) A journey that pins a ranking 'lean' must place the disliked items where raw catalogue order would deal them inside the asserted window, so the assertion fails when taste has no effect.
 - (milestone review) When a change adds iTunes lookups to the refill path, check what the shared budget leaves for just-in-time samples and whether a sample request that hits the cool-down is ever retried.
+- (milestone review) A failure 'kind' that can be retried (budget cool-down, server 429, offline) must reach the UI as a different state from a real 'no result', both in the return type and in what the card shows while waiting.
+- (milestone review) When a status value such as 'nosample' means several different things in the player, don't trigger new behaviour on it alone; check why it was emitted or keep separate state for 'waiting on lookup'.
