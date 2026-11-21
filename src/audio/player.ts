@@ -102,8 +102,8 @@ export class PreviewPlayer {
       element.load();
     }
 
-    const previous = this.buffers[other(index)];
-    if (!previous.paused) previous.pause();
+    // pause() on an already-paused element is a spec no-op.
+    this.buffers[other(index)].pause();
 
     this.activeIndex = index;
     this.emit({ status: 'playing', key: card.key, progress: this.progressOf(element) });
@@ -127,7 +127,7 @@ export class PreviewPlayer {
   stop(): void {
     this.clearTimers();
     const active = this.buffers[this.activeIndex];
-    if (!active.paused) active.pause();
+    active.pause();
     const { key } = this.snapshot;
     this.emit({
       status: key === null ? 'idle' : 'paused',
@@ -228,9 +228,7 @@ export class PreviewPlayer {
 
   private pauseAll(): void {
     this.clearTimers();
-    for (const element of this.buffers) {
-      if (!element.paused) element.pause();
-    }
+    for (const element of this.buffers) element.pause();
   }
 
   private clearTimer(index: 0 | 1): void {
