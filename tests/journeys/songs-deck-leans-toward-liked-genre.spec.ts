@@ -49,6 +49,11 @@ test("on a Songs deck, liking Jazz songs and skipping Metal ones deals the Jazz 
     await page.getByRole("button", { name: t.startsWith("Jazz") ? "Like" : "Skip", exact: true }).click();
     await expect(title).not.toHaveText(t);
   }
-  const late = dealt.slice(3);
-  expect(late.filter((t) => t.startsWith("Metal")).length, `cards 4-8: ${late.join(", ")}`).toBeLessThanOrEqual(1);
+  // The diversity re-rank keeps the disliked Metal branch in the mix instead of
+  // filtering every Metal card out, but the likes still lean the deck: Jazz
+  // outnumbers Metal in the first eight cards. With no learning the catalogue
+  // alternates Metal and Jazz, so the count would be four and four.
+  const jazz = dealt.filter((t) => t.startsWith("Jazz")).length;
+  expect(jazz, `cards 1-8: ${dealt.join(", ")}`).toBeGreaterThan(dealt.length - jazz);
+  expect(dealt.some((t) => t.startsWith("Metal")), `cards 1-8: ${dealt.join(", ")}`).toBe(true);
 });
