@@ -36,3 +36,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (design review) A role=switch needs a visibly different on and off state (track fill, thumb position), not just a changed label.
 - (milestone review) A score adjustment that should only change order (popularity dampener, tie-breakers) must not feed a threshold such as the deck's `score >= 0` quality floor; test it at the deck level, not only through rank().
 - (milestone review) When a composed Catalog method changes its backend for one caller (Setup typing), check every other caller of that method (generation's genre anchors) and add a createCatalog-level test that covers them.
+- (design review) Deck height caps must let the viewport-height term win over any width floor (no max(85%, …)), and must budget for a two-line title; check that at 1280x600 and 360x640 with a long title on top.
+- (design review) A sub-screen reached from a tab (Setup inside Discover) must keep that tab highlighted and aria-current, or the nav looks broken.
