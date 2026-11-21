@@ -84,6 +84,8 @@ const GENRE_MAP: Record<string, Chip> = {
   experimental: 'experimental',
 };
 
+export const chipLabel = (id: Chip): string => CHIPS.find((chip) => chip.id === id)?.label ?? id;
+
 /**
  * Normalise one raw catalog genre string into curated chips.
  * Exact map hit first, then split on "/", "&" and "-"; anything unmapped

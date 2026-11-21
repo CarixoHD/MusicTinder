@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { FakeCatalog } from '../testkit/fakeCatalog';
 import type { Catalog } from '../types';
 import { createCatalog } from './index';
 

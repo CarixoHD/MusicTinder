@@ -127,7 +127,7 @@ export type CatalogErrorKind = 'network' | 'rate' | 'notfound' | 'unknown';
 export class CatalogError extends Error {
   readonly kind: CatalogErrorKind;
 
-  constructor(kind: CatalogErrorKind, message = kind) {
+  constructor(kind: CatalogErrorKind, message: string = kind) {
     super(message);
     this.name = 'CatalogError';
     this.kind = kind;

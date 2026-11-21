@@ -1,0 +1,114 @@
+/* Design tokens from docs/DESIGN.md. Components never use raw colours or sizes. */
+:root {
+  color-scheme: dark;
+
+  --font-sans: -apple-system, 'SF Pro Text', Inter, system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  --text-display-size: 34px;
+  --text-display-line: 38px;
+  --text-display-weight: 700;
+  --text-display-tracking: -0.5px;
+  --text-title-size: 22px;
+  --text-title-line: 26px;
+  --text-title-weight: 600;
+  --text-title-tracking: -0.5px;
+  --text-body-size: 15px;
+  --text-body-line: 20px;
+  --text-body-weight: 400;
+  --text-body-tracking: 0;
+  --text-meta-size: 13px;
+  --text-meta-line: 16px;
+  --text-meta-weight: 500;
+  --text-meta-tracking: 0;
+  --text-micro-size: 11px;
+  --text-micro-line: 14px;
+  --text-micro-weight: 500;
+  --text-micro-tracking: 0.2px;
+
+  --bg-canvas: #08090a;
+  --bg-glass: rgba(18, 20, 24, 0.72);
+  --bg-elevated: #131519;
+  --bg-subtle: #1b1d22;
+  --bg-scrim: rgba(0, 0, 0, 0.5);
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-primary: #f7f8f8;
+  --text-secondary: #9ba0a6;
+  --text-tertiary: #6b7078;
+  --accent: #8b8ff0;
+  --accent-subtle: rgba(139, 143, 240, 0.14);
+  --like: var(--accent);
+  --danger: #e5654f;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 56px;
+
+  --radius-card: 16px;
+  --radius-sheet: 24px;
+  --radius-control: 10px;
+  --radius-pill: 999px;
+
+  --shadow-drag: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --blur-glass: 24px;
+
+  --layout-max: 480px;
+  --header-height: 56px;
+  --tabbar-height: 64px;
+  --tap-target: 44px;
+
+  --duration-fast: 120ms;
+  --duration-screen: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-canvas: #fafaf8;
+  --bg-glass: rgba(255, 255, 255, 0.72);
+  --bg-elevated: #ffffff;
+  --bg-subtle: #f0f0ee;
+  --bg-scrim: rgba(0, 0, 0, 0.32);
+  --border-hairline: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --text-primary: #16181d;
+  --text-secondary: #565b63;
+  --text-tertiary: #8a8f96;
+  --accent: #4f56c7;
+  --accent-subtle: rgba(79, 86, 199, 0.1);
+  --danger: #b3402c;
+  --shadow-drag: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+
+    --bg-canvas: #fafaf8;
+    --bg-glass: rgba(255, 255, 255, 0.72);
+    --bg-elevated: #ffffff;
+    --bg-subtle: #f0f0ee;
+    --bg-scrim: rgba(0, 0, 0, 0.32);
+    --border-hairline: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.16);
+    --text-primary: #16181d;
+    --text-secondary: #565b63;
+    --text-tertiary: #8a8f96;
+    --accent: #4f56c7;
+    --accent-subtle: rgba(79, 86, 199, 0.1);
+    --danger: #b3402c;
+    --shadow-drag: 0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+}
