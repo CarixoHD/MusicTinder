@@ -9,7 +9,7 @@ const ITUNES_LOOKUP = 'https://itunes.apple.com/lookup';
 
 const server = setupServer();
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 
 beforeEach(() => {
   localStorage.clear();
@@ -25,7 +25,7 @@ afterEach(() => {
 afterAll(() => server.close());
 
 /** Serve every lookup and record the URLs the adapter actually requested. */
-function serveLookups(reply: (url: string) => unknown): string[] {
+function serveLookups(reply: (url: string) => Record<string, unknown>): string[] {
   const urls: string[] = [];
   server.use(
     http.get(ITUNES_LOOKUP, ({ request }) => {
