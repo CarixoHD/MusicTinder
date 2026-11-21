@@ -32,3 +32,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a change adds iTunes lookups to the refill path, check what the shared budget leaves for just-in-time samples and whether a sample request that hits the cool-down is ever retried.
 - (milestone review) A failure 'kind' that can be retried (budget cool-down, server 429, offline) must reach the UI as a different state from a real 'no result', both in the return type and in what the card shows while waiting.
 - (milestone review) When a status value such as 'nosample' means several different things in the player, don't trigger new behaviour on it alone; check why it was emitted or keep separate state for 'waiting on lookup'.
+- (design review) Every selection in a form (picked seed, chip, toggle) must give visible feedback where the user's eye already is, not in a list below the fold.
+- (design review) A role=switch needs a visibly different on and off state (track fill, thumb position), not just a changed label.
