@@ -42,3 +42,4 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a layout change shrinks a component (compact deck at 1280x600), recheck the text overlays other issues place inside it and retake their screenshots on the merged code.
 - (design review) Once a card is rendered as top or next, no async refill or re-score may replace it; only the pool behind the visible stack can reorder, or a key press acts on a card the user never saw.
 - (design review) Every image slot (card art, list thumb, seed pill, search result) needs one shared token-coloured fallback with a centred ~24 px glyph, covering both 'no artwork' and onError.
+- Save screenshots to .slopper/evidence/issue-N/ (pass that path as the filename), never the repo root; root images are gitignored.
