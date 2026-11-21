@@ -2,26 +2,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { relatedArtists, resolveDeezerArtist } from './deezer';
 import { jsonp } from './deezerJsonp';
 
-const realAppendChild = document.head.appendChild.bind(document.head);
+const observers: MutationObserver[] = [];
 
 /**
- * jsdom never executes external scripts, so the test plays the CDN: every time
- * the loader appends a script, call its global callback with the reply for src.
+ * jsdom never executes external scripts, so the test plays the CDN: observe the
+ * script the real loader appends and call its global callback with the reply.
  */
 function serveScripts(reply: (src: string) => unknown) {
   const callbacks: string[] = [];
   const srcs: string[] = [];
-  vi.spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T => {
-    const script = node as unknown as HTMLScriptElement;
-    srcs.push(script.src);
-    const callback = new URL(script.src).searchParams.get('callback') ?? '';
-    callbacks.push(callback);
-    queueMicrotask(() => {
-      const handler = (window as unknown as Record<string, unknown>)[callback];
-      if (typeof handler === 'function') (handler as (payload: unknown) => void)(reply(script.src));
-    });
-    return realAppendChild(node);
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (!(node instanceof HTMLScriptElement)) continue;
+        srcs.push(node.src);
+        const callback = new URL(node.src).searchParams.get('callback') ?? '';
+        callbacks.push(callback);
+        queueMicrotask(() => {
+          const handler = (window as unknown as Record<string, unknown>)[callback];
+          if (typeof handler === 'function') (handler as (payload: unknown) => void)(reply(node.src));
+        });
+      }
+    }
   });
+  observer.observe(document.head, { childList: true });
+  observers.push(observer);
   return { callbacks, srcs };
 }
 
@@ -30,6 +35,7 @@ const dzGlobals = () => Object.keys(window).filter((key) => key.startsWith('__dz
 
 afterEach(() => {
   vi.useRealTimers();
+  for (const observer of observers.splice(0)) observer.disconnect();
 });
 
 describe('deezer JSONP transport', () => {
@@ -61,9 +67,6 @@ describe('deezer JSONP transport', () => {
 
   it('rejects with a network CatalogError and cleans up when the callback never fires', async () => {
     vi.useFakeTimers();
-    vi.spyOn(document.head, 'appendChild').mockImplementation(<T extends Node>(node: T): T =>
-      realAppendChild(node),
-    );
 
     const pending = jsonp('https://api.deezer.com/artist/27');
     const assertion = expect(pending).rejects.toMatchObject({ name: 'CatalogError', kind: 'network' });
