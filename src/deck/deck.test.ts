@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { FakeCatalog } from '../testkit/fakeCatalog';
 import { initTaste, score } from '../taste/taste';
+import { topChip } from '../taste/diversity';
 import {
   CatalogError,
   type Card,
@@ -56,7 +57,7 @@ const artistCard = (id: number, chip: Chip): Card => ({
 
 /** A catalog whose related-artist spine is exactly the cards a test needs. */
 class FixedCatalog implements Catalog {
-  constructor(private readonly cards: Card[]) {}
+  constructor(readonly cards: Card[]) {}
 
   async searchSeeds(): Promise<SeedCandidate[]> {
     return [];
@@ -96,6 +97,55 @@ class FlakyCatalog extends FixedCatalog {
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
     if (this.failing) throw new CatalogError(this.kind, this.kind);
     return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** A catalog where every seed anchor opens its own branch of related artists. */
+class BranchCatalog implements Catalog {
+  private readonly branches = new Map<number, Card[]>();
+  private readonly chipsByCreator = new Map<string, Chip[]>();
+
+  constructor(branches: { deezerArtistId: number; cards: Card[] }[]) {
+    for (const branch of branches) {
+      this.branches.set(branch.deezerArtistId, branch.cards);
+      for (const card of branch.cards) this.chipsByCreator.set(card.creatorKey, card.chips);
+    }
+  }
+
+  async searchSeeds(): Promise<SeedCandidate[]> {
+    return [];
+  }
+
+  async resolveDeezerArtist(name: string) {
+    return { id: 1, name };
+  }
+
+  async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    return (this.branches.get(deezerArtistId) ?? []).slice(0, limit);
+  }
+
+  async enrichArtist(name: string) {
+    const chips = this.chipsByCreator.get(name.trim().toLowerCase());
+    return chips ? { itunesArtistId: 7000 + this.chipsByCreator.size, chips } : null;
+  }
+
+  async artistTopTracks(): Promise<Card[]> {
+    return [];
+  }
+
+  async artistAlbums(): Promise<Card[]> {
+    return [];
+  }
+
+  async samplePreview(): Promise<Sample | undefined> {
+    return undefined;
+  }
+}
+
+/** More cards than one refill's related-artist limit, for the hot-path test. */
+class BigCatalog extends FixedCatalog {
+  override async relatedArtists(): Promise<Card[]> {
+    return this.cards;
   }
 }
 
@@ -566,5 +616,103 @@ describe('deck commit', () => {
     catalog.failing = false;
     const retried = await deck.refill();
     expect(retried.status).toBe('dealing');
+  });
+});
+
+describe('deck diversity', () => {
+  const ELECTRONIC_SEEDS: Seed[] = [1, 2, 3].map((n) => ({
+    id: `electro-${n}`,
+    kind: 'artist',
+    name: `Electro ${n}`,
+    creatorKey: `electro ${n}`,
+    deezerArtistId: 70 + n,
+    chips: ['electronic'],
+  }));
+  const WEEKND_SEED: Seed = {
+    id: 'weeknd',
+    kind: 'artist',
+    name: 'The Weeknd',
+    creatorKey: 'the weeknd',
+    deezerArtistId: 74,
+    chips: ['r&b-soul'],
+  };
+
+  const branchCard = (anchor: string, id: number, chip: Chip, fans: number): Card => ({
+    key: `dz:artist:${id}`,
+    kind: 'artist',
+    source: 'deezer',
+    title: `${anchor} ${id}`,
+    creator: `${anchor} ${id}`,
+    creatorKey: `${anchor} ${id}`.toLowerCase(),
+    image: `https://cdn.example.test/artists/${id}.jpg`,
+    chips: [chip],
+    fans,
+  });
+
+  const stackedCatalog = () =>
+    new BranchCatalog([
+      ...ELECTRONIC_SEEDS.map((seed, branch) => ({
+        deezerArtistId: seed.deezerArtistId ?? 0,
+        cards: Array.from({ length: 6 }, (_, n) => branchCard(`Electro ${branch + 1}`, 100 * branch + n + 1, 'electronic', 3_000)),
+      })),
+      {
+        deezerArtistId: WEEKND_SEED.deezerArtistId ?? 0,
+        cards: Array.from({ length: 6 }, (_, n) => branchCard('Weeknd Act', 900 + n, 'r&b-soul', 5_000_000)),
+      },
+    ]);
+
+  const deal = async (count: number): Promise<{ deck: ReturnType<typeof createDeck>; dealt: Card[] }> => {
+    const seeds = [...ELECTRONIC_SEEDS, WEEKND_SEED];
+    const deck = createDeck({ catalog: stackedCatalog(), seeds, cardType: 'artist', taste: initTaste(seeds) });
+    await deck.refill();
+    const dealt: Card[] = [];
+    while (dealt.length < count && deck.state.pool.length > 0) {
+      const card = deck.state.pool[0];
+      dealt.push(card);
+      deck.commit({ card, reaction: 'skip', elapsedMs: 3000 });
+    }
+    return { deck, dealt };
+  };
+
+  it('deals the minority R&B seed early among stacked electronic seeds', async () => {
+    const { deck, dealt } = await deal(12);
+
+    expect(deck.state).toMatchObject({ status: 'dealing', emptyReason: null });
+    expect(dealt.slice(0, 6).some((card) => card.chips.includes('r&b-soul'))).toBe(true);
+    expect(dealt.slice(0, 12).filter((card) => card.chips.includes('r&b-soul')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('never deals more than three of one top chip in any five consecutive cards', async () => {
+    const { deck, dealt } = await deal(12);
+    const chips = dealt.map((card) => topChip(card, deck.state.taste));
+
+    for (let start = 0; start + 5 <= chips.length; start += 1) {
+      const window = chips.slice(start, start + 5);
+      for (const chip of new Set(window)) {
+        expect(window.filter((other) => other === chip).length).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+
+  it('returns the next card from a 100-card pool on a synchronous commit', async () => {
+    const cards = Array.from({ length: 100 }, (_, i) => artistCard(1000 + i, i % 2 === 0 ? 'rock' : 'jazz'));
+    const deck = createDeck({
+      catalog: new BigCatalog(cards),
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    await deck.refill();
+    expect(deck.state.pool).toHaveLength(100);
+
+    const started = performance.now();
+    const next = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    const elapsed = performance.now() - started;
+
+    expect(next).toBe(deck.state);
+    expect(next.pool).toHaveLength(99);
+    expect(next.pool[0]).toBeDefined();
+    expect(Array.isArray(next.pool)).toBe(true);
+    expect(elapsed).toBeLessThan(50);
   });
 });

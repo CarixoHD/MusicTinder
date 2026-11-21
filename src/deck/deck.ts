@@ -1,4 +1,5 @@
-import { applyFeedback, rank, score } from '../taste/taste';
+import { applyFeedback, score } from '../taste/taste';
+import { DIVERSITY_HISTORY, diversify } from '../taste/diversity';
 import { CatalogError } from '../types';
 import type {
   Card,
@@ -88,6 +89,9 @@ export function createDeck(init: DeckInit): Deck {
     swipes: 0,
   };
   let pending: Promise<DeckState> | null = null;
+  // The last cards dealt, oldest first: the diversity windows carry across
+  // commits, so the interleaving keeps its promise as the pool shrinks.
+  const recent: Card[] = [];
   // Artists liked this deck, most recent first: second-hop anchors for the next
   // refill. `generateCandidates` caps how many of them it expands.
   const likedAnchors: LikedAnchor[] = [];
@@ -97,15 +101,16 @@ export function createDeck(init: DeckInit): Deck {
     likedAnchors.unshift({ name: card.creator, creatorKey: card.creatorKey });
   };
 
-  // Unseen, above the quality floor (story 10), best first, each carrying the
-  // `because you like X` its current score supports.
+  // Unseen, above the quality floor (story 10), relevance-ordered per branch,
+  // then interleaved so one seed branch cannot take every slot (ADR 7). Each
+  // card carries the `because you like X` its current score supports.
   const ranked = (taste: TasteWeights, cards: Card[]): Card[] => {
     const unique = new Map<string, Card>();
     for (const card of cards) {
       if (!seen.has(card.key) && !unique.has(card.key)) unique.set(card.key, card);
     }
     const passing = [...unique.values()].filter((card) => score(taste, card).score >= 0);
-    return rank(taste, passing).map((card) => {
+    return diversify(taste, passing, recent).map((card) => {
       const because = score(taste, card).because;
       return because ? { ...card, because } : card;
     });
@@ -156,6 +161,8 @@ export function createDeck(init: DeckInit): Deck {
 
     const { taste } = applyFeedback(state.taste, reaction);
     seen.add(current.key);
+    recent.push(current);
+    if (recent.length > DIVERSITY_HISTORY) recent.shift();
     init.sink?.setTaste(taste);
     init.sink?.markSeen(current.key);
     if (reaction.reaction === 'like') {
