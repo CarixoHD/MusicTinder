@@ -94,6 +94,8 @@ export interface Card {
   fans?: number;
   /** Display name of the seed/liked item that produced the strongest score. */
   because?: string;
+  /** Song title of the just-in-time sample attached by Discovery, when known. */
+  sampleTitle?: string;
 }
 
 export interface Reaction {
@@ -151,6 +153,13 @@ export class CatalogError extends Error {
   }
 }
 
+/** A just-in-time preview and the song it belongs to. */
+export interface Sample {
+  previewUrl: string;
+  /** The song's title, when the catalog reports one. */
+  title?: string;
+}
+
 /** How a just-in-time preview lookup may wait on the shared iTunes budget. */
 export interface SampleOptions {
   /** Wait for the next refill during a cool-down instead of reporting no sample. */
@@ -184,5 +193,5 @@ export interface Catalog {
    * A just-in-time preview for a card that shipped without one; undefined when
    * there is none. With `waitForBudget` a cool-down is retried after a refill.
    */
-  samplePreview(card: Card, options?: SampleOptions): Promise<string | undefined>;
+  samplePreview(card: Card, options?: SampleOptions): Promise<Sample | undefined>;
 }

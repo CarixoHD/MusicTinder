@@ -4,7 +4,7 @@ import { createCatalog } from '../../catalog';
 import { createDeck, type Deck, type DeckState } from '../../deck/deck';
 import { useStore } from '../../store/store';
 import { initTaste } from '../../taste/taste';
-import type { Card as CardModel, CardKind, Catalog, Seed, TasteWeights } from '../../types';
+import type { Card as CardModel, CardKind, Catalog, Sample, Seed, TasteWeights } from '../../types';
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { DeckNotice } from '../components/DeckNotice';
@@ -99,7 +99,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
   const [state, setState] = useState<DeckState>(deck.state);
   const [loading, setLoading] = useState(() => deck.state.status === 'dealing' && !deck.state.pool.length);
   // Previews resolved for cards the catalog ships silent, keyed by card key.
-  const [samples, setSamples] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const [samples, setSamples] = useState<ReadonlyMap<string, Sample>>(() => new Map());
   // Cards whose lookup has answered; a genuine miss stays "No sample" for good.
   const requested = useRef(new Set<string>());
   // Lookups still waiting on the catalog budget, so a swipe can abandon them.
@@ -159,8 +159,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
 
   const withSample = useCallback(
     (card: CardModel): CardModel => {
-      const previewUrl = card.previewUrl ?? samples.get(card.key);
-      return previewUrl && previewUrl !== card.previewUrl ? { ...card, previewUrl } : card;
+      const sample = samples.get(card.key);
+      const previewUrl = card.previewUrl ?? sample?.previewUrl;
+      const sampleTitle = card.sampleTitle ?? sample?.title;
+      return previewUrl === card.previewUrl && sampleTitle === card.sampleTitle
+        ? card
+        : { ...card, previewUrl, sampleTitle };
     },
     [samples],
   );
@@ -194,12 +198,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
           priority: card.key === state.pool[0]?.key,
           signal: controller.signal,
         })
-        .then((previewUrl) => {
+        .then((sample) => {
           if (controller.signal.aborted) return;
           lookups.current.delete(card.key);
           requested.current.add(card.key);
-          if (!previewUrl || !mounted.current) return;
-          setSamples((current) => new Map(current).set(card.key, previewUrl));
+          if (!sample || !mounted.current) return;
+          setSamples((current) => new Map(current).set(card.key, sample));
         })
         .catch(() => {
           if (!controller.signal.aborted) requested.current.add(card.key);
@@ -225,9 +229,9 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     if (!sound || !card) return;
     const snapshot = player.getSnapshot();
     if (snapshot.key !== card.key || snapshot.status !== 'nosample') return;
-    const previewUrl = card.previewUrl ?? samples.get(card.key);
-    if (previewUrl) player.play({ ...card, previewUrl });
-  }, [player, samples, sound, state]);
+    const resolved = withSample(card);
+    if (resolved.previewUrl) player.play(resolved);
+  }, [player, sound, state, withSample]);
 
   // Keep the following card's sample warm. The current card loads on its first tap.
   useEffect(() => {

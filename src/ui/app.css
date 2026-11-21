@@ -737,6 +737,18 @@ button {
   line-height: var(--text-body-line);
 }
 
+/* The sample's song, one quiet line: reserved and ellipsised so a long title
+   never moves the controls under the card. */
+.card__sample {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-meta-size);
+  line-height: var(--text-meta-line);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .card__meta {
   display: flex;
   flex-wrap: wrap;

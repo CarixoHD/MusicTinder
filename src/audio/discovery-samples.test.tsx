@@ -2,8 +2,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useStore } from '../store/store';
-import { FakeCatalog } from '../testkit/fakeCatalog';
-import type { Card, CardKind, SampleOptions } from '../types';
+import { FakeCatalog, SAMPLE_TITLE } from '../testkit/fakeCatalog';
+import type { Card, CardKind, Sample, SampleOptions } from '../types';
 import Discovery from '../ui/screens/Discovery';
 import { previewPlayer } from './player';
 
@@ -30,6 +30,10 @@ const current = (): HTMLElement => {
 
 const playButton = (): HTMLButtonElement | null => current().querySelector('button.play-button');
 
+/** The reserved sample line: `null` when the card has none, '' when it is empty. */
+const sampleLine = (): string | null =>
+  current().querySelector('.card__sample')?.textContent ?? null;
+
 const button = (label: string): HTMLButtonElement => {
   const element = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
     (candidate) => candidate.getAttribute('aria-label') === label,
@@ -50,20 +54,20 @@ const click = async (element: HTMLButtonElement): Promise<void> => {
  */
 class LateCatalog extends FakeCatalog {
   readonly sampleCalls: { key: string; priority: boolean; signal?: AbortSignal }[] = [];
-  private readonly resolvers = new Map<string, (previewUrl: string | undefined) => void>();
+  private readonly resolvers = new Map<string, (sample: Sample | undefined) => void>();
 
-  override async samplePreview(card: Card, options: SampleOptions = {}): Promise<string | undefined> {
+  override async samplePreview(card: Card, options: SampleOptions = {}): Promise<Sample | undefined> {
     this.sampleCalls.push({ key: card.key, priority: options.priority ?? false, signal: options.signal });
     return new Promise((resolve) => {
       this.resolvers.set(card.key, resolve);
     });
   }
 
-  resolveSample(key: string, previewUrl: string | undefined): void {
+  resolveSample(key: string, sample: Sample | undefined): void {
     const resolve = this.resolvers.get(key);
     if (!resolve) throw new Error(`no sample lookup pending for ${key}`);
     this.resolvers.delete(key);
-    resolve(previewUrl);
+    resolve(sample);
   }
 
   callsFor(key: string): number {
@@ -121,15 +125,20 @@ afterEach(() => {
 });
 
 describe('Discovery sample previews', () => {
-  it('turns a silent artist card into a working play button, and the next card auto-plays on like', async () => {
+  it('names the sample song on a silent artist card and in the play button’s accessible name', async () => {
     await renderDeck('artist');
 
     expect(current().textContent).not.toContain('No sample');
-    const play = playButton();
-    expect(play?.getAttribute('aria-label')).toBe('Play sample');
+    expect(sampleLine()).toBe(`♪ Sample: ${SAMPLE_TITLE}`);
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
+  });
 
+  it('turns a silent artist card into a working play button, and the next card auto-plays on like', async () => {
+    await renderDeck('artist');
+
+    const play = playButton();
     await click(play as HTMLButtonElement);
-    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Pause sample: ${SAMPLE_TITLE}`);
     const firstKey = previewPlayer().getSnapshot().key;
     expect(firstKey).not.toBeNull();
 
@@ -138,18 +147,19 @@ describe('Discovery sample previews', () => {
     const snapshot = previewPlayer().getSnapshot();
     expect(snapshot.status).toBe('playing');
     expect(snapshot.key).not.toBe(firstKey);
-    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Pause sample: ${SAMPLE_TITLE}`);
   });
 
-  it('turns a silent album card into a working play button, and the next card auto-plays on like', async () => {
+  it('turns a silent album card into a working play button named after its sample song', async () => {
     await renderDeck('album');
 
     expect(current().textContent).not.toContain('No sample');
+    expect(sampleLine()).toBe(`♪ Sample: ${SAMPLE_TITLE}`);
     const play = playButton();
-    expect(play?.getAttribute('aria-label')).toBe('Play sample');
+    expect(play?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
 
     await click(play as HTMLButtonElement);
-    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Pause sample: ${SAMPLE_TITLE}`);
     const firstKey = previewPlayer().getSnapshot().key;
 
     await click(button('Like'));
@@ -157,7 +167,14 @@ describe('Discovery sample previews', () => {
     const snapshot = previewPlayer().getSnapshot();
     expect(snapshot.status).toBe('playing');
     expect(snapshot.key).not.toBe(firstKey);
-    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Pause sample: ${SAMPLE_TITLE}`);
+  });
+
+  it('shows no extra sample line on a song card, which is its own sample', async () => {
+    await renderDeck('song');
+
+    expect(sampleLine()).toBeNull();
+    expect(playButton()?.getAttribute('aria-label')).toBe('Play sample');
   });
 
   it('gives the visible card’s lookup priority over the next card’s prefetch', async () => {
@@ -179,11 +196,12 @@ describe('Discovery sample previews', () => {
     const { key } = promoted;
     if (key === null) throw new Error('the swipe played no card');
 
-    catalog.resolveSample(key, 'https://audio.example.test/late.m4a');
+    catalog.resolveSample(key, { previewUrl: 'https://audio.example.test/late.m4a', title: 'Late Song' });
     await flush();
 
     expect(previewPlayer().getSnapshot()).toMatchObject({ status: 'playing', key });
-    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample');
+    expect(sampleLine()).toBe('♪ Sample: Late Song');
+    expect(playButton()?.getAttribute('aria-label')).toBe('Pause sample: Late Song');
   });
 
   it('abandons the previous card’s lookup when the listener swipes on', async () => {
@@ -207,6 +225,7 @@ describe('Discovery sample previews', () => {
     await flush();
 
     expect(current().textContent).toContain('No sample');
+    expect(sampleLine()).toBe('');
     expect(catalog.callsFor(upcomingKey)).toBe(1);
   });
 });

@@ -225,7 +225,7 @@ describe('artistAlbums', () => {
 
 const cardOf = (overrides: Partial<Card> & Pick<Card, 'key' | 'kind'>): Card => ({
   source: 'itunes',
-  title: 'Night Bus',
+  title: 'Card Title',
   creator: 'Ada Vale',
   creatorKey: 'ada vale',
   chips: [],
@@ -236,16 +236,17 @@ const albumCard = cardOf({ key: 'it:album:501', kind: 'album' });
 const artistCard = cardOf({ key: 'dz:artist:5101', kind: 'artist' });
 
 describe('samplePreview', () => {
-  it('resolves an album card preview from the album song lookup', async () => {
+  it('resolves an album card sample with the matched song’s preview and title', async () => {
     const urls = serveLookups(() => TRACK_RESPONSE);
 
-    await expect(samplePreview(albumCard)).resolves.toBe(
-      'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
-    );
+    await expect(samplePreview(albumCard)).resolves.toEqual({
+      previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
+      title: 'Night Bus',
+    });
     expect(urls[0]).toBe('https://itunes.apple.com/lookup?id=501&entity=song&limit=5');
   });
 
-  it('resolves an artist card preview from the first hit by that artist, ignoring other artists', async () => {
+  it('resolves an artist card sample from the first hit by that artist, ignoring other artists', async () => {
     const urls: string[] = [];
     server.use(
       http.get(ITUNES_SEARCH, ({ request }) => {
@@ -253,25 +254,42 @@ describe('samplePreview', () => {
         return HttpResponse.json({
           resultCount: 2,
           results: [
-            { kind: 'song', artistName: 'Someone Else', previewUrl: 'https://audio.example.test/wrong.m4a' },
-            { kind: 'song', artistName: 'Ada Vale', previewUrl: 'https://audio.example.test/right.m4a' },
+            {
+              kind: 'song',
+              artistName: 'Someone Else',
+              trackName: 'Wrong Song',
+              previewUrl: 'https://audio.example.test/wrong.m4a',
+            },
+            {
+              kind: 'song',
+              artistName: 'Ada Vale',
+              trackName: 'Right Song',
+              previewUrl: 'https://audio.example.test/right.m4a',
+            },
           ],
         });
       }),
     );
 
-    await expect(samplePreview(artistCard)).resolves.toBe('https://audio.example.test/right.m4a');
+    await expect(samplePreview(artistCard)).resolves.toEqual({
+      previewUrl: 'https://audio.example.test/right.m4a',
+      title: 'Right Song',
+    });
     expect(urls[0]).toBe('https://itunes.apple.com/search?term=Ada%20Vale&media=music&entity=song&limit=5');
   });
 
-  it('serves a repeat call for the same card from cache without a second fetch', async () => {
+  it('serves a repeat call for the same card from cache with the same title and no second fetch', async () => {
     const urls = serveLookups(() => TRACK_RESPONSE);
 
     const first = await samplePreview(albumCard);
     const second = await samplePreview(albumCard);
 
-    expect(first).toBeDefined();
-    expect(second).toBe(first);
+    expect(first).toEqual({
+      previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
+      title: 'Night Bus',
+    });
+    expect(second).toEqual(first);
+    expect(second?.title).toBe('Night Bus');
     expect(urls).toHaveLength(1);
   });
 
@@ -402,9 +420,10 @@ describe('iTunes budget', () => {
     expect(settled).toBe(false);
 
     vi.advanceTimersByTime(3_000);
-    await expect(pending).resolves.toBe(
-      'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
-    );
+    await expect(pending).resolves.toEqual({
+      previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/abc/preview.m4a',
+      title: 'Night Bus',
+    });
     expect(urls).toHaveLength(ITUNES_BUDGET + 1);
   });
 

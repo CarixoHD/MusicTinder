@@ -6,6 +6,7 @@ import {
   type Card,
   type Catalog,
   type Chip,
+  type Sample,
   type Seed,
   type SeedCandidate,
   type TasteWeights,
@@ -82,7 +83,7 @@ class FixedCatalog implements Catalog {
     return [];
   }
 
-  async samplePreview(): Promise<string | undefined> {
+  async samplePreview(): Promise<Sample | undefined> {
     return undefined;
   }
 }

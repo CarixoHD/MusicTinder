@@ -63,11 +63,14 @@ export function PlayButton({ card }: { card: CardModel }) {
   const isPlaying = isCurrent && snapshot.status === 'playing';
   const progress = isCurrent ? snapshot.progress : 0;
 
+  // The sample names its song, so the control does too.
+  const sample = card.sampleTitle ? `: ${card.sampleTitle}` : '';
+
   return (
     <button
       type="button"
       className="play-button"
-      aria-label={isPlaying ? 'Pause sample' : 'Play sample'}
+      aria-label={isPlaying ? `Pause sample${sample}` : `Play sample${sample}`}
       aria-pressed={isPlaying}
       onClick={() => {
         if (isPlaying) {

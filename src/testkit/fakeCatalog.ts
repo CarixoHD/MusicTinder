@@ -1,4 +1,4 @@
-import type { Card, Catalog, Chip, SeedCandidate } from '../types';
+import type { Card, Catalog, Chip, Sample, SeedCandidate } from '../types';
 
 interface Anchor {
   name: string;
@@ -48,6 +48,9 @@ const RELATED: readonly RelatedSeed[] = [
 ];
 
 const creatorKey = (name: string) => name.trim().toLowerCase();
+
+/** The fixture sample song; long enough to truncate on a phone-width card. */
+export const SAMPLE_TITLE = 'Night Bus (Live from the North Coast)';
 
 /** Related artists need a stable iTunes id so album/song decks can be dealt. */
 const relatedItunesId = (deezerId: number) => deezerId + 2000;
@@ -167,8 +170,13 @@ export class FakeCatalog implements Catalog {
   }
 
   /** Mirrors the live catalog: artist/album cards start silent, a sample resolves on demand. */
-  async samplePreview(card: Card): Promise<string | undefined> {
-    if (card.kind === 'song') return card.previewUrl;
-    return `https://audio.example.test/${card.key.replace(/:/g, '-')}.m4a`;
+  async samplePreview(card: Card): Promise<Sample | undefined> {
+    if (card.kind === 'song') {
+      return card.previewUrl ? { previewUrl: card.previewUrl, title: card.title } : undefined;
+    }
+    return {
+      previewUrl: `https://audio.example.test/${card.key.replace(/:/g, '-')}.m4a`,
+      title: SAMPLE_TITLE,
+    };
   }
 }

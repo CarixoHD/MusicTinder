@@ -43,6 +43,12 @@ export function Card({ card }: { card: CardModel }) {
       </h2>
       <p className="card__creator">{secondary}</p>
 
+      {/* The line is reserved on artist/album cards so a resolving sample never
+          pushes the controls below it. A song card is its own sample. */}
+      {card.kind !== 'song' && (
+        <p className="card__sample">{card.sampleTitle ? `♪ Sample: ${card.sampleTitle}` : ''}</p>
+      )}
+
       <div className="card__meta">
         {card.year !== undefined && <span className="card__year">{card.year}</span>}
         {card.chips.slice(0, 2).map((chip) => (
