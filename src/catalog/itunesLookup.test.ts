@@ -2,7 +2,7 @@ import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Card } from '../types';
-import { resetItunesBudget } from './budget';
+import { ITUNES_BUDGET, resetItunesBudget } from './budget';
 import { artistAlbums, artistTopTracks, enrichArtist, samplePreview } from './itunesLookup';
 
 const ITUNES_SEARCH = 'https://itunes.apple.com/search';
@@ -352,6 +352,31 @@ describe('iTunes budget', () => {
     await Promise.all([artistTopTracks(1, 1), artistTopTracks(2, 1), artistTopTracks(3, 1)]);
 
     expect(maxInFlight).toBe(1);
+  });
+
+  it('keeps two tokens for the first cards’ samples when album enrichment spends the budget', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    resetItunesBudget();
+    const urls: string[] = [];
+    server.use(
+      http.get(ITUNES_LOOKUP, ({ request }) => {
+        urls.push(request.url);
+        const entity = new URL(request.url).searchParams.get('entity');
+        return HttpResponse.json(entity === 'song' ? TRACK_RESPONSE : ALBUM_RESPONSE);
+      }),
+    );
+
+    // More album lookups than the budget: background enrichment stops early…
+    for (let id = 1; id <= ITUNES_BUDGET + 3; id += 1) {
+      await artistAlbums(id, 1);
+    }
+    expect(urls).toHaveLength(ITUNES_BUDGET - 2);
+
+    // …so the current and next card's just-in-time previews still resolve.
+    await expect(samplePreview(albumCard)).resolves.toBeDefined();
+    await expect(samplePreview({ ...albumCard, key: 'it:album:502' })).resolves.toBeDefined();
+    expect(urls).toHaveLength(ITUNES_BUDGET);
   });
 
   it('resolves empty without fetching once the budget is spent, and recovers after a minute', async () => {

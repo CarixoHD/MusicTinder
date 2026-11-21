@@ -101,14 +101,26 @@ async function fetchResults(url: string): Promise<ItunesResult[]> {
 }
 
 /** `null` means the budget is cooling down: no token was spent and no fetch ran. */
-function lookupResults(path: string): Promise<ItunesResult[] | null> {
+function lookupResults(path: string, reserve = 0): Promise<ItunesResult[] | null> {
   const url = `${ITUNES_API}${path}`;
-  return cached(url, () => withItunesBudget<ItunesResult[] | null>(null, () => fetchResults(url)));
+  return cached(url, () =>
+    withItunesBudget<ItunesResult[] | null>(null, () => fetchResults(url), reserve),
+  );
 }
+
+/**
+ * A dealt album card resolves its preview with a follow-up song lookup, and the
+ * first two cards ask for one right after the deck deals. Album enrichment leaves
+ * these two tokens unspent, otherwise a fresh Albums deck spends the whole budget
+ * dealing and its first card can never find a sample. Song cards already carry
+ * their preview, so their lookups reserve nothing.
+ */
+const SAMPLE_RESERVE = 2;
 
 export async function enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
   const results = await lookupResults(
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
+    SAMPLE_RESERVE,
   );
   if (results === null) return null;
 
@@ -156,7 +168,10 @@ export async function artistTopTracks(itunesArtistId: number, limit: number): Pr
 }
 
 export async function artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
-  const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`);
+  const results = await lookupResults(
+    `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
+    SAMPLE_RESERVE,
+  );
   if (results === null) return [];
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
