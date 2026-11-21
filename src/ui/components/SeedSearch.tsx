@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createCatalog } from '../../catalog';
+import { chipLabel } from '../../chips';
 import { useStore } from '../../store/store';
 import type { Seed, SeedCandidate } from '../../types';
 import { Button } from '../Button';
@@ -92,9 +93,11 @@ export function SeedSearch({ type }: SeedSearchProps) {
           {view.candidates.map((candidate) => {
             const seed = seedFrom(candidate);
             const added = seeds.some((existing) => existing.id === seed.id);
-            const meta = added
-              ? 'Added'
-              : [candidate.creator, candidate.year].filter(Boolean).join(' · ');
+            const detail =
+              candidate.kind === 'artist'
+                ? candidate.chips.map(chipLabel).join(' · ')
+                : [candidate.creator, candidate.year].filter(Boolean).join(' · ');
+            const meta = added ? 'Added' : detail;
             return (
               <li key={seed.id}>
                 <button
