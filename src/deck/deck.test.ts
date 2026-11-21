@@ -179,6 +179,36 @@ describe('deck refill', () => {
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
   });
+
+  it('keeps the cards in hand after a background refill fails and asks to try again', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    catalog.failing = false;
+    const dealt = await deck.refill();
+    expect(dealt.status).toBe('dealing');
+
+    catalog.failing = true;
+    const stalled = await deck.refill();
+
+    expect(stalled.status).toBe('stalled');
+    expect(stalled.pool).toEqual(dealt.pool);
+    // There are still cards to swipe, so a later swipe must be able to retry
+    // the catalog instead of the deck staying stalled forever.
+    expect(deck.shouldRefill()).toBe(true);
+
+    const swiped = deck.commit({ card: stalled.pool[0], reaction: 'skip', elapsedMs: 100 });
+    // One failure must not disappear just because a card was swiped.
+    expect(swiped.status).toBe('stalled');
+
+    catalog.failing = false;
+    const recovered = await deck.refill();
+    expect(recovered.status).toBe('dealing');
+  });
 });
 
 describe('deck commit', () => {

@@ -116,7 +116,11 @@ export function createDeck(init: DeckInit): Deck {
     if (reaction.reaction === 'like') init.sink?.addLiked(likedFrom(current));
 
     const pool = ranked(taste, state.pool.slice(1));
-    state = { pool, status: pool.length > 0 ? 'dealing' : 'empty', taste, swipes: state.swipes + 1 };
+    // A failed refill keeps the deck `stalled` until one succeeds, so the
+    // inline retry stays up while the cards in hand remain swipeable.
+    const status =
+      state.status === 'stalled' ? 'stalled' : pool.length > 0 ? 'dealing' : 'empty';
+    state = { pool, status, taste, swipes: state.swipes + 1 };
     return state;
   };
 
@@ -129,7 +133,8 @@ export function createDeck(init: DeckInit): Deck {
     prefetchQueue: (current = state) => current.pool.slice(1, 1 + PREFETCH_AHEAD),
     shouldRefill: () =>
       pending === null &&
-      state.status !== 'stalled' &&
-      (state.swipes >= REFILL_EVERY || state.pool.length < MIN_POOL),
+      (state.status === 'stalled' ||
+        state.swipes >= REFILL_EVERY ||
+        state.pool.length < MIN_POOL),
   };
 }
