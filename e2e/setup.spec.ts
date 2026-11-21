@@ -120,11 +120,16 @@ test('a genre chip toggles its seed and styles itself with the accent', async ({
   await expect
     .poll(() => pop.evaluate((el) => getComputedStyle(el).backgroundColor))
     .toBe(ACCENT_SUBTLE);
-  const selected = await pop.evaluate((el) => {
-    const style = getComputedStyle(el);
-    return { border: style.borderTopColor, color: style.color };
-  });
-  expect(selected).toEqual({ border: ACCENT, color: ACCENT });
+  // The border/colour transitions end a frame after the background one, so
+  // poll them too instead of reading once mid-flight.
+  await expect
+    .poll(() =>
+      pop.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { border: style.borderTopColor, color: style.color };
+      }),
+    )
+    .toEqual({ border: ACCENT, color: ACCENT });
   expect(await storedSeeds(page)).toMatchObject([{ id: 'genre:pop', kind: 'genre', chips: ['pop'] }]);
 
   await pop.click();
