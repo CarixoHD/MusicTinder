@@ -936,6 +936,20 @@ describe('deck wildcards', () => {
     expect(catalog.searches).toEqual([]);
   });
 
+  it('explores a different genre chip on each refill, not on every swipe', async () => {
+    const catalog = new WildcardBranchCatalog();
+    // Both branches are on the listener's taste, so only the genre search can
+    // supply a wildcard and it runs on both refills.
+    const taste: TasteWeights = { chips: { electronic: 3, pop: 2, ambient: 1 }, creators: {}, origins: {} };
+    const deck = createDeck({ catalog, seeds: [ADA, NORTH], cardType: 'artist', taste, wildcards: true });
+
+    await deck.refill();
+    await deck.refill();
+
+    expect(catalog.searches).toHaveLength(2);
+    expect(catalog.searches[0]).not.toBe(catalog.searches[1]);
+  });
+
   it('drops queued wildcards when turned off mid-session and resumes at the next refill', async () => {
     const deck = setup();
     await deck.refill();
