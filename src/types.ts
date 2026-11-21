@@ -134,6 +134,16 @@ export class CatalogError extends Error {
   }
 }
 
+/** How a just-in-time preview lookup may wait on the shared iTunes budget. */
+export interface SampleOptions {
+  /** Wait for the next refill during a cool-down instead of reporting no sample. */
+  waitForBudget?: boolean;
+  /** The visible card's lookup is served before lower-priority (prefetch) lookups. */
+  priority?: boolean;
+  /** Abandon the wait when the card is no longer in play. */
+  signal?: AbortSignal;
+}
+
 export interface Catalog {
   searchSeeds(term: string, type: 'artist' | 'album'): Promise<SeedCandidate[]>;
   resolveDeezerArtist(name: string): Promise<{ id: number; name: string } | null>;
@@ -141,6 +151,9 @@ export interface Catalog {
   enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null>;
   artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]>;
   artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]>;
-  /** A just-in-time preview for a card that shipped without one; undefined when there is none. */
-  samplePreview(card: Card): Promise<string | undefined>;
+  /**
+   * A just-in-time preview for a card that shipped without one; undefined when
+   * there is none. With `waitForBudget` a cool-down is retried after a refill.
+   */
+  samplePreview(card: Card, options?: SampleOptions): Promise<string | undefined>;
 }
