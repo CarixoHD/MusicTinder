@@ -143,6 +143,13 @@ class FailingReleasesCatalog extends DeeperCatalog {
   }
 }
 
+/** The catalog answers "nothing there" for every anchor. */
+class NotFoundCatalog extends FakeCatalog {
+  override async relatedArtists(): Promise<Card[]> {
+    throw new CatalogError('notfound', 'no data');
+  }
+}
+
 const failingCatalog = (): Catalog => {
   const fail = async (): Promise<never> => {
     throw new CatalogError('network', 'offline');
@@ -261,5 +268,11 @@ describe('generateCandidates', () => {
     await expect(
       generateCandidates(new FailingReleasesCatalog(), ARTIST_SEEDS, 'album', new Set()),
     ).rejects.toBeInstanceOf(CatalogError);
+  });
+
+  it('treats a catalog answer of "nothing there" as an empty deck, not an outage', async () => {
+    const cards = await generateCandidates(new NotFoundCatalog(), ARTIST_SEEDS, 'artist', new Set());
+
+    expect(cards).toEqual([]);
   });
 });

@@ -32,8 +32,11 @@ export async function generateCandidates(
     try {
       return await call();
     } catch (error) {
-      failures += 1;
-      lastError = error;
+      // 'notfound' is the catalog answering "nothing there", not an outage.
+      if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
+        failures += 1;
+        lastError = error;
+      }
       return undefined;
     }
   };
