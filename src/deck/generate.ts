@@ -17,7 +17,7 @@ interface Anchor {
  * Build the raw candidate pool for one refill: Deezer related artists as the
  * spine, iTunes lookups to turn an artist into album/song cards. Uses only the
  * Catalog interface. Best effort: a failing anchor or enrichment is skipped;
- * only when every catalog call failed does the refill reject.
+ * the refill rejects only when failures leave nothing to deal.
  */
 export async function generateCandidates(
   catalog: Catalog,
@@ -25,26 +25,29 @@ export async function generateCandidates(
   cardType: CardKind,
   seenKeys: ReadonlySet<string>,
 ): Promise<Card[]> {
-  let calls = 0;
   let failures = 0;
   let lastError: unknown;
 
   const attempt = async <T>(call: () => Promise<T>): Promise<T | undefined> => {
-    calls += 1;
     try {
       return await call();
     } catch (error) {
-      failures += 1;
-      lastError = error;
+      // 'notfound' is the catalog answering "nothing there", not an outage.
+      if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
+        failures += 1;
+        lastError = error;
+      }
       return undefined;
     }
   };
 
-  const finish = <T>(value: T): T => {
-    if (calls > 0 && failures === calls) {
+  // A partial outage that leaves nothing to deal is still an outage: reporting
+  // an empty deck would tell the listener their seeds are exhausted.
+  const finish = (cards: Card[]): Card[] => {
+    if (cards.length === 0 && failures > 0) {
       throw lastError instanceof CatalogError ? lastError : new CatalogError('unknown', String(lastError));
     }
-    return value;
+    return cards;
   };
 
   // 1. Anchors: artist seeds, the artist behind an album seed, and one search
