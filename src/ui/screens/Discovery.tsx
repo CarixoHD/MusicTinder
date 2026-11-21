@@ -163,7 +163,28 @@ export default function Discovery() {
   const current = state.pool[0];
 
   if (!current) {
-    if (loading && state.status !== 'stalled') {
+    if (state.status === 'stalled') {
+      return (
+        <section className="screen screen--empty" aria-labelledby="discovery-stalled-title">
+          <h1 id="discovery-stalled-title" className="screen__title">
+            Couldn&apos;t reach the catalog
+          </h1>
+          <p className="screen__body">
+            Nothing you picked is lost. Try again, or check your connection.
+          </p>
+          <div className="screen__actions">
+            <Button variant="primary" onClick={freshDeck}>
+              Try again
+            </Button>
+            <Button variant="secondary" onClick={() => withTransition(() => setScreen('setup'))}>
+              Change seeds
+            </Button>
+          </div>
+        </section>
+      );
+    }
+
+    if (loading) {
       return (
         <section className="screen screen--empty" aria-labelledby="discovery-loading-title">
           <h1 id="discovery-loading-title" className="screen__title">
@@ -199,6 +220,17 @@ export default function Discovery() {
       <h1 id="discovery-title" className="sr-only">
         Discover
       </h1>
+
+      {/* The catalog is unreachable but cards are still in hand: keep them
+          swipeable and offer the retry inline, never a blocking screen. */}
+      {state.status === 'stalled' && (
+        <p className="deck__notice" role="status">
+          <span>Couldn&apos;t reach the catalog</span>
+          <Button variant="secondary" onClick={freshDeck}>
+            Try again
+          </Button>
+        </p>
+      )}
 
       <div className="deck__stack">
         <div className="deck__current">
