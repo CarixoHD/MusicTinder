@@ -223,11 +223,13 @@ describe('deck refill', () => {
   it('names a budget cool-down as a rate failure so the notice offers the right retry', async () => {
     const catalog = new FlakyCatalog(controlledCards());
     catalog.kind = 'rate';
+    // A listener with history would otherwise get the false deck-end copy.
     const deck = createDeck({
       catalog,
       seeds: [ANCHOR],
       cardType: 'album',
       taste: initTaste([ANCHOR]),
+      seen: controlledCards().map((card) => card.key),
     });
 
     const stalled = await deck.refill();

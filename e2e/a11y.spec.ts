@@ -153,6 +153,26 @@ test('the inline retry row has no axe violations while cards stay on screen', as
   expect(await axeViolations(page)).toEqual([]);
 });
 
+test('the stalled deck screen has no axe violations', async ({ page }) => {
+  await mockCatalog(page, { enrichRelatedArtists: true });
+  await seedApp(page);
+
+  let catalogDown = true;
+  await page.route('**/*', (route) => {
+    const host = new URL(route.request().url()).host;
+    if (catalogDown && (host === 'itunes.apple.com' || host === 'api.deezer.com')) {
+      return route.abort('failed');
+    }
+    return route.fallback();
+  });
+  await page.goto('/');
+
+  await expect(page.getByRole('heading', { level: 1, name: "Couldn't reach the catalog" })).toBeVisible();
+  catalogDown = false;
+
+  expect(await axeViolations(page)).toEqual([]);
+});
+
 test('keyboard only: Tab adds a seed, starts the deck, then arrows like and skip', async ({
   page,
 }) => {

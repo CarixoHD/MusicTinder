@@ -103,3 +103,40 @@ test('cold start to a saved like survives a reload with seeds and taste intact',
   // Nothing outside the mocked catalog/preview hosts was ever contacted.
   expect(externalRequests).toEqual([]);
 });
+
+test('Setup searches that drain the iTunes budget leave a retry, not a seeds problem', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1, name: 'Find something new' })).toBeVisible();
+
+  // An albums deck needs iTunes enrichment, which spends the same ~17/min budget.
+  await page.getByRole('button', { name: 'Albums' }).click();
+  const search = page.getByRole('searchbox', { name: 'Search albums' });
+  await search.fill('ada');
+  await page.getByRole('button', { name: /Ada Vale/ }).click();
+  await expect(page.getByRole('button', { name: 'Remove Ada Vale No. 1' })).toBeVisible();
+
+  // Drain what the seed search left: wait for each answer until Setup itself
+  // reports that Apple is limiting searches.
+  const limited = page.getByText('Apple is limiting searches right now');
+  for (let n = 0; n < 40; n += 1) {
+    await search.fill(`zz ${n}`);
+    await expect(limited.or(page.getByText(`No match for ‘zz ${n}’`))).toBeVisible();
+    if (await limited.isVisible()) break;
+  }
+  await expect(limited).toBeVisible();
+
+  await page.getByRole('button', { name: 'Start discovering' }).click();
+
+  // The cool-down is a failure the listener can retry, not "nothing here".
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Apple is limiting new finds right now' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Nothing to recommend from these seeds yet' }),
+  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Change seeds' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Your deck is getting ready' })).toHaveCount(0);
+});
