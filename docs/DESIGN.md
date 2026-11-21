@@ -46,11 +46,14 @@ separate palette.
 | `--border-strong` | `rgba(255,255,255,.16)` | `rgba(0,0,0,.16)` |
 | `--text-primary` | `#f7f8f8` | `#16181d` |
 | `--text-secondary` | `#9ba0a6` | `#565b63` |
-| `--text-tertiary` | `#6b7078` | `#8a8f96` |
+| `--text-tertiary` | `#858b94` | `#686d74` |
 | `--accent` | `#8b8ff0` | `#4f56c7` |
 | `--accent-subtle` | `rgba(139,143,240,.14)` | `rgba(79,86,199,.10)` |
 | `--like` | `--accent` | `--accent` |
 | `--danger` | `#e5654f` | `#b3402c` (unused in v1 interactions; reset only) |
+
+Every text token clears WCAG AA (≥ 4.5:1) against both `--bg-canvas` and
+`--bg-elevated` in dark and light, so 13 px meta text is never decoration.
 
 The accent (a quiet iris) is the single non-neutral tint: liked state, active chip,
 focus rings, the one progress affordance. It never appears on more than one
