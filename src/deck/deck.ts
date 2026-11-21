@@ -1,4 +1,5 @@
 import { applyFeedback, rank, score } from '../taste/taste';
+import { CatalogError } from '../types';
 import type {
   Card,
   CardKind,
@@ -116,6 +117,9 @@ export function createDeck(init: DeckInit): Deck {
         const generated = await generateCandidates(init.catalog, init.seeds, init.cardType, seen, {
           likedAnchors,
           poolCreatorKeys: new Set(state.pool.map((card) => card.creatorKey)),
+          // A deck with nothing to deal waits out the app's own iTunes
+          // cool-down instead of reporting the catalog as unreachable.
+          waitForFirstCard: state.pool.length === 0,
         });
         const pool = ranked(state.taste, [...state.pool, ...generated]);
         state = {
@@ -130,10 +134,14 @@ export function createDeck(init: DeckInit): Deck {
                 : 'filtered',
           swipes: 0,
         };
-      } catch {
+      } catch (error) {
         // A rejected refill keeps the cards already in hand and surfaces
-        // `stalled` so the caller can offer a retry.
-        state = { ...state, status: 'stalled' };
+        // `stalled` so the caller can offer a retry — except when the only
+        // failure is the app's own iTunes budget cooling down and there are
+        // cards to deal: nothing failed on the network, so the deck keeps
+        // swiping and refills later instead of claiming the catalog is down.
+        const coolingDown = error instanceof CatalogError && error.kind === 'budget';
+        if (!coolingDown || state.pool.length === 0) state = { ...state, status: 'stalled' };
       }
       return state;
     })().finally(() => {

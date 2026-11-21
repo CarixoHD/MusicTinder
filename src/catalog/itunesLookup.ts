@@ -1,5 +1,12 @@
 import { normalizeGenre } from '../chips';
-import { CatalogError, type Card, type Chip, type Sample, type SampleOptions } from '../types';
+import {
+  CatalogError,
+  type Card,
+  type Chip,
+  type LookupOptions,
+  type Sample,
+  type SampleOptions,
+} from '../types';
 import { withItunesBudget, type BudgetOptions } from './budget';
 import { cached } from './cache';
 
@@ -109,7 +116,8 @@ function lookupResults(path: string, options: BudgetOptions = {}): Promise<Itune
 
 /**
  * Card-building lookups must not turn a cool-down into an empty answer: the deck
- * would blame the seeds or claim the direction is exhausted.
+ * would blame the seeds or claim the direction is exhausted. A 'budget' error is
+ * the app's own allowance (no request failed), not the catalog being unreachable.
  */
 const COOLING_DOWN = 'iTunes is cooling down';
 
@@ -122,12 +130,15 @@ const COOLING_DOWN = 'iTunes is cooling down';
  */
 const SAMPLE_RESERVE = 2;
 
-export async function enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
+export async function enrichArtist(
+  name: string,
+  options: LookupOptions = {},
+): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
   const results = await lookupResults(
     `/search?term=${encodeURIComponent(name)}&media=music&entity=musicArtist&limit=5`,
-    { reserve: SAMPLE_RESERVE },
+    { reserve: SAMPLE_RESERVE, wait: options.waitForBudget },
   );
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
 
   let bestId: number | null = null;
   let bestChips: Chip[] = [];
@@ -145,9 +156,15 @@ export async function enrichArtist(name: string): Promise<{ itunesArtistId: numb
   return bestId === null ? null : { itunesArtistId: bestId, chips: bestChips };
 }
 
-export async function artistTopTracks(itunesArtistId: number, limit: number): Promise<Card[]> {
-  const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`);
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+export async function artistTopTracks(
+  itunesArtistId: number,
+  limit: number,
+  options: LookupOptions = {},
+): Promise<Card[]> {
+  const results = await lookupResults(`/lookup?id=${itunesArtistId}&entity=song&limit=${limit}`, {
+    wait: options.waitForBudget,
+  });
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }
@@ -172,12 +189,16 @@ export async function artistTopTracks(itunesArtistId: number, limit: number): Pr
     );
 }
 
-export async function artistAlbums(itunesArtistId: number, limit: number): Promise<Card[]> {
+export async function artistAlbums(
+  itunesArtistId: number,
+  limit: number,
+  options: LookupOptions = {},
+): Promise<Card[]> {
   const results = await lookupResults(
     `/lookup?id=${itunesArtistId}&entity=album&limit=${limit}`,
-    { reserve: SAMPLE_RESERVE },
+    { reserve: SAMPLE_RESERVE, wait: options.waitForBudget },
   );
-  if (results === null) throw new CatalogError('rate', COOLING_DOWN);
+  if (results === null) throw new CatalogError('budget', COOLING_DOWN);
   if (results.length === 0) {
     throw new CatalogError('notfound', `iTunes has no artist ${itunesArtistId}`);
   }

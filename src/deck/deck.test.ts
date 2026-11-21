@@ -6,6 +6,7 @@ import {
   type Card,
   type Catalog,
   type Chip,
+  type LookupOptions,
   type Sample,
   type Seed,
   type SeedCandidate,
@@ -90,11 +91,21 @@ class FixedCatalog implements Catalog {
 
 class FlakyCatalog extends FixedCatalog {
   failing = true;
-  kind: 'network' | 'rate' = 'network';
+  kind: 'network' | 'rate' | 'budget' = 'network';
 
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
     if (this.failing) throw new CatalogError(this.kind, this.kind);
     return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** Records whether generation was allowed to wait on the iTunes budget. */
+class RecordingCatalog extends FakeCatalog {
+  readonly enrichWaits: boolean[] = [];
+
+  override async enrichArtist(name: string, options?: LookupOptions) {
+    this.enrichWaits.push(options?.waitForBudget === true);
+    return super.enrichArtist(name);
   }
 }
 
@@ -308,6 +319,21 @@ describe('deck refill', () => {
     expect(spy.mock.calls.map(([deezerArtistId]) => deezerArtistId)).toContain(5101);
   });
 
+  it('lets the first card’s lookup wait out a cool-down only while the deck has nothing', async () => {
+    const catalog = new RecordingCatalog();
+    const deck = createDeck({
+      catalog,
+      seeds: [ADA],
+      cardType: 'song',
+      taste: initTaste([ADA]),
+    });
+
+    const dealt = await deck.refill();
+
+    expect(dealt.status).toBe('dealing');
+    expect(catalog.enrichWaits[0]).toBe(true);
+  });
+
   it('reports stalled when a refill rejects and deals again after a working retry', async () => {
     const catalog = new FlakyCatalog(controlledCards());
     const deck = createDeck({
@@ -378,6 +404,37 @@ describe('deck refill', () => {
     const recovered = await deck.refill();
     // A successful refill clears the failure; the deck really is exhausted now.
     expect(recovered.status).toBe('empty');
+  });
+
+  it('keeps dealing when a background refill only meets the app’s own iTunes cool-down', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    catalog.failing = false;
+    const dealt = await deck.refill();
+    expect(dealt.status).toBe('dealing');
+
+    // The budget is spent, not the catalog down: the listener must keep swiping
+    // without an outage notice.
+    catalog.kind = 'budget';
+    catalog.failing = true;
+    const cooled = await deck.refill();
+
+    expect(cooled.status).toBe('dealing');
+    expect(cooled.pool).toEqual(dealt.pool);
+
+    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    expect(swiped.status).toBe('dealing');
+
+    // An upstream rate limit (Deezer quota, iTunes 403) is a catalog failure
+    // even with cards in hand, so it still offers Retry.
+    catalog.kind = 'rate';
+    const limited = await deck.refill();
+    expect(limited.status).toBe('stalled');
   });
 });
 

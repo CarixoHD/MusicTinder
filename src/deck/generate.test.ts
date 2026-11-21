@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { FakeCatalog } from '../testkit/fakeCatalog';
-import { CatalogError, type Card, type Catalog, type Chip, type Seed } from '../types';
+import {
+  CatalogError,
+  type Card,
+  type Catalog,
+  type Chip,
+  type LookupOptions,
+  type Seed,
+} from '../types';
 import { generateCandidates, LIKED_ANCHOR_LIMIT } from './generate';
 
 const ARTIST_SEEDS: Seed[] = [
@@ -89,6 +96,27 @@ class DeeperCatalog extends FakeCatalog {
   }
 }
 
+/** Records which lookups were allowed to wait on the iTunes budget. */
+class WaitingCatalog extends DeeperCatalog {
+  readonly enrichWaits: boolean[] = [];
+  readonly releaseWaits: boolean[] = [];
+
+  override async enrichArtist(name: string, options?: LookupOptions) {
+    this.enrichWaits.push(options?.waitForBudget === true);
+    return super.enrichArtist(name);
+  }
+
+  override async artistTopTracks(itunesArtistId: number, limit: number, options?: LookupOptions) {
+    this.releaseWaits.push(options?.waitForBudget === true);
+    return super.artistTopTracks(itunesArtistId, limit);
+  }
+
+  override async artistAlbums(itunesArtistId: number, limit: number, options?: LookupOptions) {
+    this.releaseWaits.push(options?.waitForBudget === true);
+    return super.artistAlbums(itunesArtistId, limit);
+  }
+}
+
 /** An artist reachable from both artist seeds. */
 const SHARED: Card = {
   key: 'dz:artist:5999',
@@ -150,14 +178,14 @@ class FailingEnrichmentCatalog extends DeeperCatalog {
 class MixedFailureCatalog extends DeeperCatalog {
   override async enrichArtist(name: string): Promise<never> {
     if (name.trim().toLowerCase() === 'glass harbour') throw new CatalogError('network', 'offline');
-    throw new CatalogError('rate', 'iTunes is cooling down');
+    throw new CatalogError('budget', 'iTunes is cooling down');
   }
 }
 
 /** Every enrichment cools down: a transient budget failure, not "nothing there". */
 class CoolingCatalog extends DeeperCatalog {
   override async enrichArtist(): Promise<never> {
-    throw new CatalogError('rate', 'iTunes is cooling down');
+    throw new CatalogError('budget', 'iTunes is cooling down');
   }
 }
 
@@ -537,13 +565,44 @@ describe('generateCandidates', () => {
   });
 
   it.each(['artist', 'album', 'song'] as const)(
-    'rejects as a rate error when %s enrichment cools down, not as a dry deck',
+    'rejects as a budget error when %s enrichment cools down, not as a dry deck',
     async (cardType) => {
       await expect(
         generateCandidates(new CoolingCatalog(), ARTIST_SEEDS, cardType, new Set()),
-      ).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+      ).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     },
   );
+
+  it('lets only the first artist the deck deals wait out a cool-down', async () => {
+    const catalog = new WaitingCatalog();
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'artist', new Set(), {
+      waitForFirstCard: true,
+    });
+
+    expect(cards.length).toBeGreaterThan(0);
+    expect(catalog.enrichWaits[0]).toBe(true);
+    expect(catalog.enrichWaits.slice(1).every((wait) => !wait)).toBe(true);
+  });
+
+  it('lets the first song’s enrichment and lookup wait out a cool-down', async () => {
+    const catalog = new WaitingCatalog();
+    const cards = await generateCandidates(catalog, ARTIST_SEEDS, 'song', new Set(), {
+      waitForFirstCard: true,
+    });
+
+    expect(cards.length).toBeGreaterThan(0);
+    expect(catalog.enrichWaits[0]).toBe(true);
+    expect(catalog.enrichWaits.slice(1).every((wait) => !wait)).toBe(true);
+    expect(catalog.releaseWaits[0]).toBe(true);
+    expect(catalog.releaseWaits.slice(1).every((wait) => !wait)).toBe(true);
+  });
+
+  it('never makes a background refill wait while the deck still has cards', async () => {
+    const catalog = new WaitingCatalog();
+    await generateCandidates(catalog, ARTIST_SEEDS, 'song', new Set());
+
+    expect([...catalog.enrichWaits, ...catalog.releaseWaits].every((wait) => !wait)).toBe(true);
+  });
 
   it('reports the outage, not a later cool-down, when both leave nothing to deal', async () => {
     await expect(
