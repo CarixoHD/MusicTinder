@@ -416,7 +416,7 @@ describe('iTunes budget', () => {
     }
     expect(urls).toHaveLength(ITUNES_BUDGET - 2);
     // …and reports the cool-down instead of answering "no albums".
-    await expect(artistAlbums(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+    await expect(artistAlbums(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
 
     // …so the current and next card's just-in-time previews still resolve.
     await expect(samplePreview(albumCard)).resolves.toBeDefined();
@@ -464,6 +464,41 @@ describe('iTunes budget', () => {
     expect(urls).toHaveLength(1);
   });
 
+  it('lets the first card’s lookups wait out a cool-down so an exhausted deck still deals', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
+    resetItunesBudget();
+    const lookups = serveLookups(trackReply);
+    const searches: string[] = [];
+    server.use(
+      http.get(ITUNES_SEARCH, ({ request }) => {
+        searches.push(request.url);
+        return HttpResponse.json({
+          resultCount: 1,
+          results: [{ wrapperType: 'artist', artistId: 42, artistName: 'Ada Vale', primaryGenreName: 'Electronic' }],
+        });
+      }),
+    );
+
+    // The previous deck spent the whole bucket: a fresh deck starts cooling down.
+    for (let id = 1; id <= ITUNES_BUDGET; id += 1) {
+      await artistTopTracks(id, 1);
+    }
+    expect(lookups).toHaveLength(ITUNES_BUDGET);
+
+    const enriched = enrichArtist('ada vale', { waitForBudget: true });
+    const songs = artistTopTracks(42, 1, { waitForBudget: true });
+
+    // Nothing is "not found" and no request runs before a token refills.
+    vi.advanceTimersByTime(1_000);
+    expect(searches).toHaveLength(0);
+    expect(lookups).toHaveLength(ITUNES_BUDGET);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    await expect(enriched).resolves.toEqual({ itunesArtistId: 42, chips: ['electronic'] });
+    await expect(songs).resolves.toHaveLength(1);
+  });
+
   it('rejects as a rate error without fetching once the budget is spent, and recovers after a minute', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2027-01-01T00:00:00Z'));
@@ -476,8 +511,8 @@ describe('iTunes budget', () => {
     expect(urls).toHaveLength(17);
 
     // A cool-down is a failure the caller can retry, never "nothing there".
-    await expect(artistTopTracks(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
-    await expect(enrichArtist('Ada Vale')).rejects.toMatchObject({ name: 'CatalogError', kind: 'rate' });
+    await expect(artistTopTracks(99, 1)).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
+    await expect(enrichArtist('Ada Vale')).rejects.toMatchObject({ name: 'CatalogError', kind: 'budget' });
     expect(urls).toHaveLength(17);
 
     vi.setSystemTime(new Date('2027-01-01T00:01:00Z'));

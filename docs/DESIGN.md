@@ -102,10 +102,11 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   below. Fixed aspect-ratio artwork + neutral placeholder (no layout shift on load).
   Below, left-aligned: title (`text-display`, clamped to 2 lines; `text-display-long`
   when over ~18 characters), creator `--text-secondary` (for an artist card:
-  `Artist`, plus its first genre when a second genre fills the tag row — a genre
-  is never shown twice; never the name again), year + album release type + ≤ 2
-  chips (`text-meta`; Apple's ` - Single` / ` - EP` suffix is stripped from the
-  title and becomes the release-type tag), the quiet `because you like X` line in
+  `Artist · genre`, never the name again; the tag row carries the second genre,
+  or the Deezer album count when the artist has only one genre, so a genre is
+  never printed twice), year + album release type + ≤ 2 chips (`text-meta`;
+  Apple's ` - Single` / ` - EP` suffix is stripped from the title and becomes the
+  release-type tag), the quiet `because you like X` line in
   `--text-tertiary`. Play/pause as a 48 px glass circle overlapping the artwork's
   lower-right corner; sound state shown by icon **and** a 2 px progress ring around
   the circle (`--text-primary` at 0.9 over the glass, hairline track), never colour

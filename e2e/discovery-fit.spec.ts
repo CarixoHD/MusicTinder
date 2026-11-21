@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mockCatalog } from './fixtures';
+import { mockCatalog, mockLongAlbumTitles } from './fixtures';
 
 // Short viewports (a laptop window at 600/720 px tall, a small phone) are where
 // the fixed tab bar used to swallow the like/skip buttons once a two-line title
@@ -35,36 +35,6 @@ async function seedDeck(page: Page, cardType: 'artist' | 'album'): Promise<void>
   }, JSON.stringify(persisted));
 }
 
-/** Albums whose titles are long enough to wrap, whatever the card width. */
-async function dealLongAlbumTitles(page: Page): Promise<void> {
-  await page.route('https://itunes.apple.com/lookup**', async (route) => {
-    const url = new URL(route.request().url());
-    if (url.searchParams.get('entity') !== 'album') {
-      await route.fallback();
-      return;
-    }
-    const artistId = Number(url.searchParams.get('id'));
-    await route.fulfill({
-      json: {
-        resultCount: 1,
-        results: [
-          {
-            wrapperType: 'collection',
-            collectionType: 'Album',
-            collectionId: artistId * 10 + 1,
-            collectionName: `An Extraordinarily Long Album Title Number ${artistId} - Single`,
-            artistId,
-            artistName: 'The BossHoss',
-            primaryGenreName: 'Country',
-            releaseDate: '2024-04-05T00:00:00Z',
-            collectionViewUrl: `https://music.apple.com/album/${artistId * 10 + 1}`,
-          },
-        ],
-      },
-    });
-  });
-}
-
 const title = (page: Page) => page.locator('.deck__current .card__title');
 
 /** The rendered height and one line's line-height of the top card's title. */
@@ -87,7 +57,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await dealLongAlbumTitles(page);
+    await mockLongAlbumTitles(page);
     await seedDeck(page, 'album');
     await page.goto('/');
     await expect(title(page)).toHaveText(/\S/);

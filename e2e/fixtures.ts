@@ -161,6 +161,7 @@ function deezerRelated(deezerArtistId: number): unknown {
     data: anchor.related.map(([name, id]) => ({
       id,
       name,
+      nb_album: 4 + (id % 5),
       picture_medium: artwork(id),
       picture_big: artwork(id),
     })),
@@ -380,4 +381,41 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       await route.fallback();
     });
   }
+}
+
+/**
+ * Answers album lookups with long titles that wrap at any deck width, so a
+ * layout spec can deal a two-line card on top. Call it after `mockCatalog`
+ * (Playwright answers the most recently registered route first); every
+ * non-album lookup falls back to the catalog fixture.
+ */
+export async function mockLongAlbumTitles(page: Page): Promise<void> {
+  await page.route('https://itunes.apple.com/lookup**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get('entity') !== 'album') {
+      await route.fallback();
+      return;
+    }
+    const artistId = Number(url.searchParams.get('id'));
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        resultCount: 1,
+        results: [
+          {
+            wrapperType: 'collection',
+            collectionType: 'Album',
+            collectionId: artistId * 10 + 1,
+            collectionName: `An Extraordinarily Long Album Title Number ${artistId} - Single`,
+            artistId,
+            artistName: 'The BossHoss',
+            primaryGenreName: 'Country',
+            releaseDate: '2024-04-05T00:00:00Z',
+            collectionViewUrl: `https://music.apple.com/album/${artistId * 10 + 1}`,
+          },
+        ],
+      }),
+    });
+  });
 }

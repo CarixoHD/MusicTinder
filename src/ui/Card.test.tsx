@@ -37,14 +37,21 @@ afterEach(() => {
 });
 
 describe('Card genre placement', () => {
-  it('names an artist genre once, in the tag row, when it is the only genre', () => {
+  it('puts an artist’s only genre in the second line and the album count in the tag row', () => {
+    mount(card({ kind: 'artist', chips: ['alternative'], albumCount: 7 }));
+
+    expect(texts('.card__creator')).toEqual(['Artist · Alternative']);
+    expect(texts('.tag')).toEqual(['7 albums']);
+  });
+
+  it('keeps the genre tag when the catalog reports no album count', () => {
     mount(card({ kind: 'artist', chips: ['alternative'] }));
 
-    expect(texts('.card__creator')).toEqual(['Artist']);
+    expect(texts('.card__creator')).toEqual(['Artist · Alternative']);
     expect(texts('.tag')).toEqual(['Alternative']);
   });
 
-  it('uses the second line for the first genre and the tag row for the second', () => {
+  it('uses the tag row for the second genre instead of repeating the first', () => {
     mount(card({ kind: 'artist', chips: ['alternative', 'indie'] }));
 
     expect(texts('.card__creator')).toEqual(['Artist · Alternative']);

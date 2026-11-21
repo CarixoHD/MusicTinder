@@ -92,7 +92,7 @@ describe('deezer JSONP transport', () => {
 });
 
 describe('relatedArtists', () => {
-  it('maps Deezer artists to artist Cards with dz keys, picture_big images, nb_fan and normalised creatorKey', async () => {
+  it('maps Deezer artists to artist Cards with dz keys, picture_big images, fan and album counts and a normalised creatorKey', async () => {
     const { srcs } = serveScripts(() => ({
       data: [
         {
@@ -101,6 +101,7 @@ describe('relatedArtists', () => {
           picture_big: 'https://cdn-images.dzcdn.net/artist/99/500x500.jpg',
           picture_medium: 'https://cdn-images.dzcdn.net/artist/99/250x250.jpg',
           nb_fan: 816_000,
+          nb_album: 46,
         },
         { id: 100, name: 'Daft PUNK', picture_big: 'https://cdn-images.dzcdn.net/artist/100/500x500.jpg', nb_fan: 5_200_000 },
       ],
@@ -120,6 +121,7 @@ describe('relatedArtists', () => {
         image: 'https://cdn-images.dzcdn.net/artist/99/500x500.jpg',
         chips: [],
         fans: 816_000,
+        albumCount: 46,
       },
       {
         key: 'dz:artist:100',
