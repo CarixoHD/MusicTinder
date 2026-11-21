@@ -321,7 +321,7 @@ describe('generateCandidates', () => {
     ).rejects.toBeInstanceOf(CatalogError);
   });
 
-  it.each(['album', 'song'] as const)(
+  it.each(['artist', 'album', 'song'] as const)(
     'rejects as a rate error when %s enrichment cools down, not as a dry deck',
     async (cardType) => {
       await expect(
