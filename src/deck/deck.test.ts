@@ -378,6 +378,31 @@ describe('deck refill', () => {
     // A successful refill clears the failure; the deck really is exhausted now.
     expect(recovered.status).toBe('empty');
   });
+
+  it('keeps dealing when a background refill only meets the app’s own iTunes cool-down', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'artist',
+      taste: initTaste([ANCHOR]),
+    });
+    catalog.failing = false;
+    const dealt = await deck.refill();
+    expect(dealt.status).toBe('dealing');
+
+    // The budget is spent, not the catalog down: the listener must keep swiping
+    // without an outage notice.
+    catalog.kind = 'rate';
+    catalog.failing = true;
+    const cooled = await deck.refill();
+
+    expect(cooled.status).toBe('dealing');
+    expect(cooled.pool).toEqual(dealt.pool);
+
+    const swiped = deck.commit({ card: deck.state.pool[0], reaction: 'skip', elapsedMs: 100 });
+    expect(swiped.status).toBe('dealing');
+  });
 });
 
 describe('deck commit', () => {
