@@ -86,29 +86,35 @@ export async function generateCandidates(
   // Seed artists themselves (and anchors) never come back as candidates.
   const excluded = new Set(anchorMap.keys());
 
-  // 2. Resolve each anchor to a Deezer id when the seed does not carry one.
-  const resolved: (Anchor & { deezerArtistId: number })[] = [];
+  // 2. Resolve each anchor to its Deezer id(s) when the seed does not carry one.
+  const resolved: (Anchor & { deezerArtistIds: number[] })[] = [];
   for (const anchor of anchorMap.values()) {
     if (anchor.deezerArtistId !== undefined) {
-      resolved.push({ ...anchor, deezerArtistId: anchor.deezerArtistId });
+      resolved.push({ ...anchor, deezerArtistIds: [anchor.deezerArtistId] });
       continue;
     }
     const found = await attempt(() => catalog.resolveDeezerArtist(anchor.name));
-    if (found) resolved.push({ ...anchor, deezerArtistId: found.id });
+    if (found) resolved.push({ ...anchor, deezerArtistIds: [found.id, ...(found.alternatives ?? []).map((a) => a.id)] });
   }
 
   // 3. Related artists, deduped by creatorKey, merging the anchors behind them.
+  //    A duplicate profile can answer with no related artists at all: try the next
+  //    same-name profile before giving up on the anchor.
   const related = new Map<string, Card>();
   for (const anchor of resolved) {
-    const candidates = await attempt(() => catalog.relatedArtists(anchor.deezerArtistId, RELATED_LIMIT));
-    for (const card of candidates ?? []) {
-      if (card.kind !== 'artist' || seenKeys.has(card.key) || excluded.has(card.creatorKey)) continue;
-      const existing = related.get(card.creatorKey);
-      if (existing) {
-        existing.related = [...new Set([...(existing.related ?? []), anchor.creatorKey])];
-      } else {
-        related.set(card.creatorKey, { ...card, related: [anchor.creatorKey] });
+    for (const deezerArtistId of anchor.deezerArtistIds) {
+      const candidates = await attempt(() => catalog.relatedArtists(deezerArtistId, RELATED_LIMIT));
+      if (!candidates?.length) continue;
+      for (const card of candidates) {
+        if (card.kind !== 'artist' || seenKeys.has(card.key) || excluded.has(card.creatorKey)) continue;
+        const existing = related.get(card.creatorKey);
+        if (existing) {
+          existing.related = [...new Set([...(existing.related ?? []), anchor.creatorKey])];
+        } else {
+          related.set(card.creatorKey, { ...card, related: [anchor.creatorKey] });
+        }
       }
+      break;
     }
   }
 
