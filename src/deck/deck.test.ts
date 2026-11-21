@@ -286,14 +286,18 @@ class CoolingThenTaggedCatalog implements Catalog {
     return this.cards.slice(0, limit);
   }
 
-  async enrichArtist(name: string, options?: LookupOptions) {
+  async enrichArtist(
+    name: string,
+    options?: LookupOptions,
+  ): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
     const wait = options?.waitForBudget === true;
     this.enrichCalls.push({ name, wait });
     const index = this.cards.findIndex((card) => card.creatorKey === name.trim().toLowerCase());
     const itunesArtistId = 2000 + index;
+    const chips: Chip[] = this.tag ? ['rock'] : [];
     if (index < WAIT_ARTIST_LIMIT) return { itunesArtistId, chips: [] };
     if (this.cooling && !wait) throw new CatalogError('budget', 'iTunes is cooling down');
-    return { itunesArtistId, chips: this.tag ? ['rock'] : [] };
+    return { itunesArtistId, chips };
   }
 
   async artistTopTracks(): Promise<Card[]> {

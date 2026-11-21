@@ -159,10 +159,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
     });
   }, [deck]);
 
-  const freshDeck = () => {
+  // Stable identity: the notice arms its cool-down retry from this callback, so
+  // a new function on every render would keep pushing the retry back.
+  const freshDeck = useCallback(() => {
     setLoading(true);
     refill();
-  };
+  }, [refill]);
 
   // Entering with an empty taste derives it from the seeds once, so ranking is
   // meaningful and a reload keeps the same starting point.
@@ -423,7 +425,11 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       );
     }
 
-    if (state.status === 'stalled' || state.emptyReason === 'no-candidates') {
+    if (
+      state.status === 'stalled' ||
+      state.status === 'cooling' ||
+      state.emptyReason === 'no-candidates'
+    ) {
       return (
         <DeckNotice
           status={state.status}

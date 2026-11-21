@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { BUDGET_WINDOW_MS } from '../../catalog/budget';
 import type { EmptyReason } from '../../deck/deck';
 import type { DeckStatus } from '../../types';
 import { Button } from '../Button';
@@ -32,6 +33,28 @@ export function DeckNotice({
     window.addEventListener('online', onRetry);
     return () => window.removeEventListener('online', onRetry);
   }, [status, onRetry]);
+
+  // A cool-down is the app's own iTunes allowance, not a failure: the window
+  // refills on its own, so retry then unless the listener asked sooner.
+  useEffect(() => {
+    if (status !== 'cooling') return;
+    const timer = setTimeout(onRetry, BUDGET_WINDOW_MS);
+    return () => clearTimeout(timer);
+  }, [status, onRetry]);
+
+  if (status === 'cooling') {
+    return (
+      <EmptyState
+        icon={<DiscoverIcon width={32} height={32} />}
+        title="Still looking"
+        body="Trying again in a moment."
+      >
+        <Button variant="secondary" onClick={onRetry}>
+          Retry
+        </Button>
+      </EmptyState>
+    );
+  }
 
   if (status === 'stalled') {
     if (hasCards) {

@@ -12,9 +12,10 @@ export const WILDCARD_ENRICH_LIMIT = 2;
 /** Liked artists are extra anchors, but seeds must keep the bulk of the iTunes budget. */
 export const LIKED_ANCHOR_LIMIT = 2;
 /**
- * Related artists a fresh deck may hold for an iTunes token before it gives up
- * and ends like any empty deck. Past this, a seed whose artists all miss would
- * sit in "getting ready" for minutes.
+ * Related artists a fresh deck may hold for an iTunes token. Past this the rest
+ * are looked up best effort; the ones the spent budget refuses are reported to
+ * the deck as a retryable cool-down, never as a dry deck. Otherwise a seed whose
+ * artists all miss would sit in "getting ready" for minutes.
  */
 export const WAIT_ARTIST_LIMIT = 6;
 
@@ -66,15 +67,24 @@ export async function generateCandidates(
   let failures = 0;
   let lastError: unknown;
   let networkError: CatalogError | undefined;
+  /** The app's own iTunes allowance refused an artist: it was never checked. */
+  let budgetError: CatalogError | undefined;
   /** A failure other than the app's own iTunes allowance: a real catalog problem. */
   let hardFailure = false;
+  /** The first real failure, so a later cool-down cannot hide it. */
+  let hardError: unknown;
 
   const recordFailure = (error: unknown) => {
     // 'notfound' is the catalog answering "nothing there", not an outage.
     if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
       failures += 1;
       lastError = error;
-      if (!(error instanceof CatalogError) || error.kind !== 'budget') hardFailure = true;
+      if (error instanceof CatalogError && error.kind === 'budget') {
+        budgetError ??= error;
+      } else {
+        hardFailure = true;
+        hardError ??= error;
+      }
       if (error instanceof CatalogError && error.kind === 'network') networkError = error;
     }
   };
@@ -101,13 +111,15 @@ export async function generateCandidates(
   // A partial outage that leaves nothing to deal is still an outage: reporting
   // an empty deck would tell the listener their seeds are exhausted. A real
   // outage outranks a budget cool-down, which failed requests themselves cause.
-  // A deck that waited out its own cool-down and still found nothing is the
-  // exception: that is an empty deck, not the catalog being unreachable.
+  // A cool-down that refused artists is neither: they were never checked, so
+  // the caller gets a budget error and retries once the window refills. Only a
+  // deck whose artists were all checked may report "nothing there".
   const finish = (cards: Card[]): Card[] => {
     if (cards.length === 0 && failures > 0) {
       if (networkError) throw networkError;
-      if (options.waitForFirstCard === true && !hardFailure) return cards;
-      throw lastError instanceof CatalogError ? lastError : new CatalogError('unknown', String(lastError));
+      if (!hardFailure) throw budgetError ?? new CatalogError('budget', 'iTunes is cooling down');
+      const error = hardError ?? lastError;
+      throw error instanceof CatalogError ? error : new CatalogError('unknown', String(error));
     }
     return cards;
   };
@@ -350,8 +362,8 @@ export async function generateCandidates(
   if (cardType === 'artist') {
     // Wait out the cool-down until an artist is actually tagged, not for one
     // fixed index: iTunes may not know the first related artist at all. Bounded,
-    // so a seed whose artists all miss ends like any empty deck; the rest then
-    // enrich in parallel without waiting.
+    // so a seed whose artists all miss still answers quickly; any artist the
+    // spent budget then refuses is reported by finish as a retryable cool-down.
     const tagged: Card[] = [];
     let index = 0;
     if (options.waitForFirstCard === true) {

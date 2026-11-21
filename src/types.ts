@@ -152,7 +152,11 @@ export interface Settings {
   wildcards: boolean;
 }
 
-export type DeckStatus = 'dealing' | 'empty' | 'stalled';
+/**
+ * 'cooling' is the app's own iTunes allowance leaving candidates unchecked: a
+ * retryable pause, not the seeds running dry and not a catalog outage.
+ */
+export type DeckStatus = 'dealing' | 'empty' | 'stalled' | 'cooling';
 
 /** 'budget' is the app's own iTunes allowance, not the catalog failing. */
 export type CatalogErrorKind = 'network' | 'rate' | 'budget' | 'notfound' | 'unknown';
