@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { mockPlaybackCatalog, seedSongDeck } from '../src/audio/playback-fixture';
 import { mockCatalog } from './fixtures';
 
 // A returning listener's profile: one artist seed, one like and real taste,
@@ -42,6 +43,31 @@ const metaColors = (page: Page): Promise<(string | null)[]> =>
 
 const canvasColor = (page: Page): Promise<string> =>
   page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+const anyAudioPlaying = (page: Page): Promise<boolean> =>
+  page.evaluate(() => [...document.querySelectorAll('audio')].some((element) => !element.paused));
+
+/** Ten silent seconds, so the sample is still playing when the sheet is open. */
+function longSilentWav(): Buffer {
+  const sampleRate = 8000;
+  const samples = sampleRate * 10;
+  const buffer = Buffer.alloc(44 + samples);
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + samples, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate, 28);
+  buffer.writeUInt16LE(1, 32);
+  buffer.writeUInt16LE(8, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(samples, 40);
+  buffer.fill(128, 44);
+  return buffer;
+}
 
 const storedState = (page: Page): Promise<Record<string, unknown> | null> =>
   page.evaluate(() => JSON.parse(localStorage.getItem('mt:v1') ?? 'null')?.state ?? null);
@@ -124,6 +150,41 @@ test('music app and sound choices persist and show in the reopened settings', as
     'aria-checked',
     'false',
   );
+});
+
+test('turning Sound off stops the sample that is playing', async ({ page }) => {
+  // A real audio route and a song deck, on top of the default catalog fixture.
+  const wav = longSilentWav();
+  await mockPlaybackCatalog(page);
+  await page.route('https://audio.example.test/**', (route) =>
+    route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'audio/wav',
+        'content-length': String(wav.length),
+        'accept-ranges': 'bytes',
+      },
+      body: wav,
+    }),
+  );
+  await seedSongDeck(page);
+  await page.goto('/');
+
+  const current = page.locator('.deck__current');
+  await expect(current.locator('.card__title')).toHaveText('Glass Harbour song 1');
+  await current.getByRole('button', { name: 'Play sample' }).click();
+  await expect.poll(() => anyAudioPlaying(page)).toBe(true);
+
+  const dialog = await openSettings(page);
+  await dialog.getByRole('switch', { name: 'Sound is on' }).click();
+  await expect(dialog.getByRole('switch', { name: 'Sound is off' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
+
+  // The sample behind the sheet is silent and the card reads as paused.
+  await expect.poll(() => anyAudioPlaying(page)).toBe(false);
+  await expect(current.getByRole('button', { name: 'Play sample' })).toBeVisible();
 });
 
 test('Reset asks first: cancel keeps the data, confirming wipes it and shows Setup', async ({
