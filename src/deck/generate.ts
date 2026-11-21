@@ -48,13 +48,17 @@ export async function generateCandidates(
     try {
       return await call();
     } catch (error) {
-      // 'notfound' is the catalog answering "nothing there", not an outage.
-      if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
-        failures += 1;
-        lastError = error;
-        if (error instanceof CatalogError && error.kind === 'network') networkError = error;
-      }
+      recordFailure(error);
       return undefined;
+    }
+  };
+
+  const recordFailure = (error: unknown) => {
+    // 'notfound' is the catalog answering "nothing there", not an outage.
+    if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
+      failures += 1;
+      lastError = error;
+      if (error instanceof CatalogError && error.kind === 'network') networkError = error;
     }
   };
 
@@ -124,27 +128,42 @@ export async function generateCandidates(
   //    on the anchor. A seed saved in an older session can carry a dead id, so
   //    fall back to resolving its name; a dead id is never asked twice in a run.
   const deadIds = new Set<number>();
-  const lookupRelated = async (ids: number[]): Promise<Card[] | undefined> => {
+  /** The error is kept so callers can tell a dead profile from a retryable outage. */
+  const tryRelated = async (deezerArtistId: number): Promise<{ cards?: Card[]; error?: unknown }> => {
+    try {
+      return { cards: await catalog.relatedArtists(deezerArtistId, RELATED_LIMIT) };
+    } catch (error) {
+      recordFailure(error);
+      return { error };
+    }
+  };
+
+  const lookupRelated = async (ids: number[], stopOnOutage = false) => {
     for (const deezerArtistId of ids) {
       if (deadIds.has(deezerArtistId)) continue;
-      const candidates = await attempt(() => catalog.relatedArtists(deezerArtistId, RELATED_LIMIT));
-      if (candidates?.length) return candidates;
+      const result = await tryRelated(deezerArtistId);
+      if (result.cards?.length) return { cards: result.cards, outage: false };
       deadIds.add(deezerArtistId);
+      // An outage would only make the name lookup wait out the same failure again.
+      if (stopOnOutage && result.error && !(result.error instanceof CatalogError && result.error.kind === 'unknown')) {
+        return { outage: true };
+      }
     }
-    return undefined;
+    return { outage: false };
   };
 
   const perAnchor: { anchorKey: string; cards: Card[] }[] = [];
   for (const anchor of resolved) {
-    let candidates = await lookupRelated(anchor.deezerArtistIds);
-    if (!candidates && anchor.deezerArtistId !== undefined) {
+    const stored = anchor.deezerArtistId !== undefined;
+    let outcome = await lookupRelated(anchor.deezerArtistIds, stored);
+    if (!outcome.cards && !outcome.outage && stored) {
       const found = await attempt(() => catalog.resolveDeezerArtist(anchor.name));
-      if (found) candidates = await lookupRelated([found.id, ...(found.alternatives ?? []).map((a) => a.id)]);
+      if (found) outcome = await lookupRelated([found.id, ...(found.alternatives ?? []).map((a) => a.id)]);
     }
-    if (!candidates?.length) continue;
+    if (!outcome.cards?.length) continue;
     perAnchor.push({
       anchorKey: anchor.creatorKey,
-      cards: candidates.filter(
+      cards: outcome.cards.filter(
         (card) => card.kind === 'artist' && !seenKeys.has(card.key) && !excluded.has(card.creatorKey),
       ),
     });

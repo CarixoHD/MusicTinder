@@ -208,6 +208,21 @@ class DeadStoredIdCatalog extends FakeCatalog {
 
 const DEAD_SEEDS: Seed[] = [{ ...ARTIST_SEEDS[0], deezerArtistId: DEAD_PROFILE_ID }];
 
+/** Deezer answers the dead profile with an unrecognised error rather than an empty list. */
+class UnknownErrorStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
+    if (deezerArtistId === DEAD_PROFILE_ID) throw new CatalogError('unknown', 'deezer hiccup');
+    return super.relatedArtists(deezerArtistId, limit);
+  }
+}
+
+/** The catalog is down: the stored id fails with an outage, not an empty profile. */
+class OutageStoredIdCatalog extends DeadStoredIdCatalog {
+  override async relatedArtists(): Promise<Card[]> {
+    throw new CatalogError('network', 'offline');
+  }
+}
+
 /** The catalog answers "nothing there" for every anchor. */
 class NotFoundCatalog extends FakeCatalog {
   override async relatedArtists(): Promise<Card[]> {
@@ -457,6 +472,26 @@ describe('generateCandidates', () => {
     expect(catalog.resolved).toEqual(['ada vale']);
     expect(cards.length).toBeGreaterThan(0);
     expect(cards.every((card) => card.related?.includes('ada vale'))).toBe(true);
+  });
+
+  it('resolves by name when the stored id answers with an unknown error', async () => {
+    const catalog = new UnknownErrorStoredIdCatalog();
+
+    const cards = await generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set());
+
+    expect(catalog.resolved).toEqual(['ada vale']);
+    expect(cards.length).toBeGreaterThan(0);
+  });
+
+  it('does not spend a name lookup on a stored id when the catalog is simply down', async () => {
+    const catalog = new OutageStoredIdCatalog();
+
+    await expect(generateCandidates(catalog, DEAD_SEEDS, 'artist', new Set())).rejects.toMatchObject({
+      name: 'CatalogError',
+      kind: 'network',
+    });
+
+    expect(catalog.resolved).toEqual([]);
   });
 
   it('never retries a dead deezer id within the same generation run', async () => {
