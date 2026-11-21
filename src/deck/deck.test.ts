@@ -87,9 +87,10 @@ class FixedCatalog implements Catalog {
 
 class FlakyCatalog extends FixedCatalog {
   failing = true;
+  kind: 'network' | 'rate' = 'network';
 
   override async relatedArtists(deezerArtistId: number, limit: number): Promise<Card[]> {
-    if (this.failing) throw new CatalogError('network', 'offline');
+    if (this.failing) throw new CatalogError(this.kind, this.kind);
     return super.relatedArtists(deezerArtistId, limit);
   }
 }
@@ -215,6 +216,24 @@ describe('deck refill', () => {
 
     expect(retried.status).toBe('dealing');
     expect(retried.pool.length).toBe(controlledCards().length);
+  });
+
+  it('stalls instead of ending the deck when the catalog cools down for a listener with history', async () => {
+    const catalog = new FlakyCatalog(controlledCards());
+    catalog.kind = 'rate';
+    // Without the rate error this would be "that's everything in this direction".
+    const deck = createDeck({
+      catalog,
+      seeds: [ANCHOR],
+      cardType: 'album',
+      taste: initTaste([ANCHOR]),
+      seen: controlledCards().map((card) => card.key),
+    });
+
+    const state = await deck.refill();
+
+    expect(state.status).toBe('stalled');
+    expect(state.emptyReason).toBeNull();
   });
 
   it('keeps the cards in hand after a background refill fails and asks to try again', async () => {

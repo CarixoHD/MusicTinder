@@ -27,6 +27,7 @@ export async function generateCandidates(
 ): Promise<Card[]> {
   let failures = 0;
   let lastError: unknown;
+  let networkError: CatalogError | undefined;
 
   const attempt = async <T>(call: () => Promise<T>): Promise<T | undefined> => {
     try {
@@ -36,15 +37,18 @@ export async function generateCandidates(
       if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
         failures += 1;
         lastError = error;
+        if (error instanceof CatalogError && error.kind === 'network') networkError = error;
       }
       return undefined;
     }
   };
 
   // A partial outage that leaves nothing to deal is still an outage: reporting
-  // an empty deck would tell the listener their seeds are exhausted.
+  // an empty deck would tell the listener their seeds are exhausted. A real
+  // outage outranks a budget cool-down, which failed requests themselves cause.
   const finish = (cards: Card[]): Card[] => {
     if (cards.length === 0 && failures > 0) {
+      if (networkError) throw networkError;
       throw lastError instanceof CatalogError ? lastError : new CatalogError('unknown', String(lastError));
     }
     return cards;
