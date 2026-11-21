@@ -184,7 +184,7 @@ class WildcardBranchCatalog implements Catalog {
     return (this.branchCards.get(deezerArtistId) ?? []).slice(0, limit);
   }
 
-  async enrichArtist(name: string) {
+  async enrichArtist(name: string): Promise<{ itunesArtistId: number; chips: Chip[] } | null> {
     if (name.trim().toLowerCase() === 'outside surprise') {
       return { itunesArtistId: 8800, chips: ['pop'] };
     }
