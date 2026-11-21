@@ -72,11 +72,24 @@
 @media (max-height: 620px) {
   .deck,
   .deck-loading {
-    --deck-max: min(100%, max(200px, calc(100svh - 376px)));
+    /* The height budget has to win over the floor: at 553 px tall a 200 px
+       floor left the card (and the seeds row) under the tab bar. The small
+       floor only keeps the width positive on a very short window. */
+    --deck-max: min(100%, max(120px, calc(100svh - 376px)));
   }
 
   .deck:has(> .deck-notice) .deck__stack {
-    max-width: min(100%, max(200px, calc(100svh - 440px)));
+    max-width: min(100%, max(120px, calc(100svh - 440px)));
+  }
+}
+
+/* On the short phone card the whole deck is height-capped above the tab bar,
+   so it does not need the nav-height bottom padding that scrollable screens
+   use; keeping it would make the one-card screen scroll for no reason. Taller
+   windows keep the padding so a card under the bar stays reachable by scroll. */
+@media (max-height: 620px) and (max-width: 480px) {
+  .app__main:has(> .deck) {
+    padding-bottom: var(--space-4);
   }
 }
 

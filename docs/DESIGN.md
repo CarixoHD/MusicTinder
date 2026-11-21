@@ -87,9 +87,11 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   That keeps the card large (≈376 px at 1280 × 720) while a two-line title still
   leaves the buttons visible; above 840 px the full-width card has room for the
   untrimmed card. Below 620 px the budget tightens once more
-  (`calc(100svh - 376px)`) because a year + release type + the longest genre tag
+  (`calc(100svh - 376px)`, with only a 120 px floor so the height term still
+  wins on a short phone) because a year + release type + the longest genre tag
   wrap to a second meta row there; the compact mode also tightens the meta row
-  gap to 4 px.
+  gap to 4 px and, on a phone-width card, steps the card title down to
+  `text-title`, where the display size no longer fits.
 - One screen visible at a time; two-tab bottom bar (Discover, Liked) in `--bg-glass`.
   Settings is a sheet reachable from the header only. Content never sits under chrome:
   pad with the nav's height. Setup belongs to the Discover tab: while the user
@@ -104,7 +106,8 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   border, `--radius-surface 20`, 12 px padding around the square artwork and 16 px
   below. Fixed aspect-ratio artwork + neutral placeholder (no layout shift on load).
   Below, left-aligned: title (`text-display`, clamped to 2 lines; `text-display-long`
-  when over ~18 characters), creator `--text-secondary` (for an artist card:
+  when over ~18 characters), creator `--text-secondary` on one line (ellipsis, so
+  a long name never grows the card; for an artist card:
   `Artist · genre`, never the name again; the tag row carries the second genre,
   or the Deezer album count when the artist has only one genre, so a genre is
   never printed twice), year + album release type + ≤ 2 chips (`text-meta`;
