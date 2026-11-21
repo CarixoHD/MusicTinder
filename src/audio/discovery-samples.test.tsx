@@ -364,6 +364,8 @@ describe('Discovery sample previews', () => {
     const catalog = new ExpiringCatalog();
     await renderDeck('artist', catalog);
     const key = catalog.calls[0].key;
+    // The Deezer URL is in memory and on the card when the like happens.
+    expect(playButton()?.getAttribute('aria-label')).toBe(`Play sample: ${SAMPLE_TITLE}`);
 
     await click(button('Like'));
     await flush();
