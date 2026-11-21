@@ -75,6 +75,8 @@ export interface Card {
   chips: Chip[];
   /** creatorKeys of the anchor artists this candidate came from. */
   related?: string[];
+  /** Deezer fan count of the artist; absent when the catalog does not report one. */
+  fans?: number;
   /** Display name of the seed/liked item that produced the strongest score. */
   because?: string;
 }

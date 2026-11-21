@@ -169,3 +169,35 @@ describe('rank', () => {
     expect(rank(taste, [first, jazz, second]).map((c) => c.key)).toEqual(['jazz', 'first', 'second']);
   });
 });
+
+describe('popularity dampener', () => {
+  const known = card({ key: 'known', creator: 'Daft Punk', creatorKey: 'daft punk', chips: ['electronic'], fans: 5_200_000 });
+  const lesserKnown = card({ key: 'lesser-known', creator: 'Anoraak', creatorKey: 'anoraak', chips: ['electronic'], fans: 18_000 });
+
+  it('ranks the lesser-known artist first when taste fit is equal', () => {
+    const taste = initTaste([{ id: 'seed-electronic', kind: 'genre', name: 'Electronic', chips: ['electronic'] }]);
+
+    expect(rank(taste, [known, lesserKnown]).map((c) => c.key)).toEqual(['lesser-known', 'known']);
+    expect(rank(taste, [lesserKnown, known]).map((c) => c.key)).toEqual(['lesser-known', 'known']);
+  });
+
+  it('never lets a fan-count penalty overturn a like-driven lift', () => {
+    const taste = initTaste([GENRE_SEED]);
+    const liked = card({ key: 'liked', title: 'Loud Guitars', creator: 'Rock Band', creatorKey: 'rock band', chips: ['rock'] });
+    const { taste: afterLike } = applyFeedback(taste, { card: liked, reaction: 'like', elapsedMs: 4000 });
+
+    const popularLikedFamily = card({ key: 'family', creator: 'Big Rock', creatorKey: 'big rock', chips: ['rock'], fans: 5_200_000 });
+    const obscureNoFit = card({ key: 'obscure', creator: 'Nobody', creatorKey: 'nobody', chips: ['metal'], fans: 12 });
+
+    expect(score(afterLike, popularLikedFamily).score).toBeGreaterThan(score(afterLike, obscureNoFit).score);
+    expect(rank(afterLike, [obscureNoFit, popularLikedFamily]).map((c) => c.key)).toEqual(['family', 'obscure']);
+  });
+
+  it('scores a card without a fan count exactly by its taste fit', () => {
+    const taste = initTaste([GENRE_SEED]);
+    const noFans = card({ key: 'no-fans', creator: 'A', creatorKey: 'a', chips: ['jazz'] });
+
+    expect(score(taste, noFans).score).toBe(taste.chips.jazz);
+    expect(score(taste, { ...noFans, fans: 5_200_000 }).score).toBeLessThan(score(taste, noFans).score);
+  });
+});
