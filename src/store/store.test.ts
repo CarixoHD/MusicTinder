@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LikedItem, Seed } from '../types';
-import { SEEN_LIMIT } from './store';
+import { SEEN_LIMIT, STORAGE_NOTICE } from './store';
 
 const SEED: Seed = {
   id: 'seed-1',
@@ -29,6 +29,20 @@ async function reloadStore() {
   const { useStore } = await import('./store');
   return useStore;
 }
+
+/** Writes a persisted payload exactly as an older/broken build might have left it. */
+function writePersisted(state: unknown): void {
+  localStorage.setItem('mt:v1', JSON.stringify({ state, version: 1 }));
+}
+
+function readPersisted(): { state: Record<string, unknown> } {
+  return JSON.parse(localStorage.getItem('mt:v1') ?? '{}') as { state: Record<string, unknown> };
+}
+
+const DEFAULTS = {
+  settings: { musicApp: 'spotify', sound: true, theme: 'system', cardType: 'artist' },
+  taste: { chips: {}, creators: {}, origins: {} },
+};
 
 beforeEach(() => {
   localStorage.clear();
@@ -67,6 +81,87 @@ describe('store persistence', () => {
     });
     expect(state.liked).toEqual([LIKED]);
     expect(state.seen).toEqual(['it:track:1']);
+    expect(state.storageNotice).toBeNull();
+  });
+
+  it('falls back to defaults for null or wrongly typed slices instead of crashing', async () => {
+    writePersisted({ seeds: null, settings: {}, taste: 'nope', liked: {}, seen: 'it:track:1' });
+
+    const store = await reloadStore();
+    const state = store.getState();
+
+    expect(state.seeds).toEqual([]);
+    expect(state.taste).toEqual(DEFAULTS.taste);
+    expect(state.liked).toEqual([]);
+    expect(state.seen).toEqual([]);
+    // Actions still work on the defaulted slices, so the app renders and reacts.
+    state.addSeed(SEED);
+    expect(store.getState().seeds).toEqual([SEED]);
+  });
+
+  it('falls back to defaults when the whole persisted state is null', async () => {
+    writePersisted(null);
+
+    const store = await reloadStore();
+
+    expect(store.getState().seeds).toEqual([]);
+    expect(store.getState().settings).toEqual(DEFAULTS.settings);
+    expect(store.getState().storageNotice).toBe(STORAGE_NOTICE);
+  });
+
+  it('treats a persisted state that is not an object as corrupt', async () => {
+    writePersisted([SEED]);
+
+    const store = await reloadStore();
+
+    expect(store.getState().seeds).toEqual([]);
+    expect(store.getState().storageNotice).toBe(STORAGE_NOTICE);
+  });
+
+  it('fills settings fields a saved partial object leaves out', async () => {
+    writePersisted({ settings: { musicApp: 'apple' } });
+
+    const store = await reloadStore();
+
+    expect(store.getState().settings).toEqual({ ...DEFAULTS.settings, musicApp: 'apple' });
+  });
+
+  it('falls back per settings field when a saved value is unknown', async () => {
+    writePersisted({ settings: { musicApp: 'napster', sound: 'yes', theme: 'neon', cardType: 'vinyl' } });
+
+    const store = await reloadStore();
+
+    expect(store.getState().settings).toEqual(DEFAULTS.settings);
+  });
+
+  it('keeps valid saved entries and drops broken ones', async () => {
+    writePersisted({ seeds: [SEED, { id: 42 }], liked: [LIKED, null], seen: ['it:track:1', 7] });
+
+    const store = await reloadStore();
+
+    expect(store.getState().seeds).toEqual([SEED]);
+    expect(store.getState().liked).toEqual([LIKED]);
+    expect(store.getState().seen).toEqual(['it:track:1']);
+  });
+
+  it('repairs the stored value and shows a dismissible notice when saved data was reset', async () => {
+    writePersisted({ seeds: null, settings: { musicApp: 'apple' } });
+
+    const store = await reloadStore();
+
+    expect(store.getState().storageNotice).toBe(STORAGE_NOTICE);
+    expect(STORAGE_NOTICE).toMatch(/reset/);
+    // The bad value is overwritten, so the next launch is clean.
+    const stored = readPersisted();
+    expect(stored.state.seeds).toEqual([]);
+    expect(stored.state.settings).toEqual({ ...DEFAULTS.settings, musicApp: 'apple' });
+
+    store.getState().dismissStorageNotice();
+    expect(store.getState().storageNotice).toBeNull();
+
+    const reloaded = await reloadStore();
+    expect(reloaded.getState().storageNotice).toBeNull();
+    expect(reloaded.getState().seeds).toEqual([]);
   });
 
   it('does not persist the screen or the settings sheet', async () => {
