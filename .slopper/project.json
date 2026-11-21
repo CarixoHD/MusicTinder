@@ -1,0 +1,8 @@
+{
+  "install": "npm install",
+  "typecheck": "npm run typecheck",
+  "lint": "npm run lint",
+  "test": "npm run test",
+  "testChanged": "npx vitest run --changed main",
+  "dev": "npm run dev"
+}
