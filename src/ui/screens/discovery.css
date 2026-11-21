@@ -39,8 +39,11 @@
   pointer-events: none;
 }
 
-/* A stronger edge keeps the waiting card legible at 60% opacity on both themes. */
+/* A stronger edge keeps the waiting card legible at 60% opacity on both themes.
+   It takes the top card's height, so a longer title never spills out below. */
 .deck__behind .card {
+  height: 100%;
+  overflow: hidden;
   border-color: var(--border-strong);
 }
 

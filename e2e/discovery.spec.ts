@@ -255,3 +255,21 @@ test('the first deal shows a skeleton card while the catalog is still answering'
 
   await expect(deckTitle(page)).toHaveText(/\S/);
 });
+
+test('the waiting card behind never reaches past its 10 px peek, however long its text', async ({
+  page,
+}) => {
+  await seedDeck(page);
+  await page.goto('/');
+  await expect(page.locator('.deck__behind .card')).toBeVisible();
+
+  // A next card with a much longer title than the top one must not spill out
+  // below the stack onto the like/skip buttons.
+  await page
+    .locator('.deck__behind .card__title')
+    .evaluate((el) => (el.textContent = 'A very long album title that wraps across several lines '.repeat(3)));
+
+  const stack = (await page.locator('.deck__stack').boundingBox())!;
+  const behind = (await page.locator('.deck__behind .card').boundingBox())!;
+  expect(behind.y + behind.height).toBeLessThanOrEqual(stack.y + stack.height + 11);
+});

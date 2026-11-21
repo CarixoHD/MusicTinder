@@ -322,7 +322,7 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
           <h1 id="discovery-loading-title" className="deck-loading__copy">
             Your deck is getting ready
           </h1>
-          <p className="deck-loading__hint">Finding artists near your seeds.</p>
+          <p className="deck-loading__hint">Finding {cardType}s near your seeds.</p>
         </section>
       );
     }
