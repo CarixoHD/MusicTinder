@@ -59,5 +59,9 @@ describe('DeckNotice cool-down', () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(onRetry).toHaveBeenCalledTimes(1);
+
+    // A refill that still cools down gets another window's try.
+    act(() => vi.advanceTimersByTime(BUDGET_WINDOW_MS));
+    expect(onRetry).toHaveBeenCalledTimes(2);
   });
 });
