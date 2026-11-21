@@ -87,10 +87,11 @@ pairs, switched live by `ui/theme.ts` when the user overrides.
   That keeps the card large (≈376 px at 1280 × 720) while a two-line title still
   leaves the buttons visible; above 840 px the full-width card has room for the
   untrimmed card. Below 620 px the budget tightens once more
-  (`calc(100svh - 376px)`, floor only 120 px so the height term still wins on a
-  short phone) because a year + release type + the longest genre tag
+  (`calc(100svh - 376px)`, with only a 120 px floor so the height term still
+  wins on a short phone) because a year + release type + the longest genre tag
   wrap to a second meta row there; the compact mode also tightens the meta row
-  gap to 4 px.
+  gap to 4 px and, on a phone-width card, steps the card title down to
+  `text-title`, where the display size no longer fits.
 - One screen visible at a time; two-tab bottom bar (Discover, Liked) in `--bg-glass`.
   Settings is a sheet reachable from the header only. Content never sits under chrome:
   pad with the nav's height. Setup belongs to the Discover tab: while the user

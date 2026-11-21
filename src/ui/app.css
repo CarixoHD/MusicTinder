@@ -736,6 +736,9 @@ button svg {
   display: -webkit-box;
   margin: 0;
   overflow: hidden;
+  /* A single word longer than the card wraps to the second line and
+     ellipsises instead of being cut mid-glyph at the card edge. */
+  overflow-wrap: anywhere;
   font-size: var(--text-display-size);
   line-height: var(--text-display-line);
   font-weight: var(--text-display-weight);
@@ -748,6 +751,18 @@ button svg {
   font-size: var(--text-display-long-size);
   line-height: var(--text-display-long-line);
   letter-spacing: -0.4px;
+}
+
+/* On a short phone the card is ~180 px wide; the display sizes no longer fit
+   a single word there, so the compact card steps down to the title size. It
+   must stay after the --long rule to win for a long title too. */
+@media (max-height: 620px) and (max-width: 480px) {
+  .card__title {
+    font-size: var(--text-title-size);
+    line-height: var(--text-title-line);
+    font-weight: var(--text-display-weight);
+    letter-spacing: -0.2px;
+  }
 }
 
 /* One line like the because line: a long creator name must not grow the card
