@@ -42,6 +42,7 @@ const defaultSettings = (): Settings => ({
   sound: true,
   theme: 'system',
   cardType: 'artist',
+  wildcards: true,
 });
 
 const defaultTaste = (): TasteWeights => ({ chips: {}, creators: {}, origins: {} });
@@ -226,6 +227,8 @@ function readSettings(value: unknown, read: ReadReport): Settings {
   else if (value.theme !== undefined) read.recovered = true;
   if (isOneOf(CARD_KINDS, value.cardType)) settings.cardType = value.cardType;
   else if (value.cardType !== undefined) read.recovered = true;
+  if (typeof value.wildcards === 'boolean') settings.wildcards = value.wildcards;
+  else if (value.wildcards !== undefined) read.recovered = true;
   return settings;
 }
 

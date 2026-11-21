@@ -144,6 +144,29 @@ export default function SettingsSheet() {
             </div>
           </section>
 
+          <section className="setup__section" aria-labelledby="settings-wildcards-label">
+            <h3 id="settings-wildcards-label" className="setup__label">
+              Something different
+            </h3>
+            <div className="switch-row">
+              <span className="screen__body">
+                Now and then, a card outside your usual genres.
+              </span>
+              <button
+                type="button"
+                role="switch"
+                className="switch"
+                aria-label="Something different"
+                aria-checked={settings.wildcards}
+                onClick={() => setSettings({ wildcards: !settings.wildcards })}
+              >
+                <span className="switch__track" aria-hidden="true">
+                  <span className="switch__thumb" />
+                </span>
+              </button>
+            </div>
+          </section>
+
           <section className="setup__section" aria-labelledby="settings-seeds-label">
             <h3 id="settings-seeds-label" className="setup__label">
               Your seeds

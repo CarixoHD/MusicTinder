@@ -152,7 +152,10 @@ test('music app and sound choices persist and show in the reopened settings', as
 test('the sound switch shows its value in the track, not only in the label', async ({ page }) => {
   await page.goto('/');
   const dialog = await openSettings(page);
-  const track = dialog.locator('.switch__track');
+  // The name flips with the state, so match either; the track element stays put.
+  const track = dialog
+    .getByRole('switch', { name: /^Sound is (on|off)$/ })
+    .locator('.switch__track');
 
   await expect
     .poll(() => track.evaluate((el) => getComputedStyle(el).backgroundColor))
@@ -172,9 +175,36 @@ test('the sound switch shows its value in the track, not only in the label', asy
     .toBe('rgba(255, 255, 255, 0.08)');
   await expect
     .poll(() =>
-      dialog.locator('.switch__thumb').evaluate((el) => getComputedStyle(el).transform),
+      track.locator('.switch__thumb').evaluate((el) => getComputedStyle(el).transform),
     )
     .toBe('none');
+});
+
+test('the Something different switch flips wildcards and persists across reload', async ({
+  page,
+}) => {
+  await page.goto('/');
+  let dialog = await openSettings(page);
+
+  const wildcards = dialog.getByRole('switch', { name: 'Something different' });
+  await expect(wildcards).toHaveAttribute('aria-checked', 'true');
+  await expect(
+    dialog.getByText('Now and then, a card outside your usual genres.'),
+  ).toBeVisible();
+
+  await wildcards.click();
+  await expect(dialog.getByRole('switch', { name: 'Something different' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
+  expect((await storedState(page))?.settings).toMatchObject({ wildcards: false });
+
+  await page.reload();
+  dialog = await openSettings(page);
+  await expect(dialog.getByRole('switch', { name: 'Something different' })).toHaveAttribute(
+    'aria-checked',
+    'false',
+  );
 });
 
 test('Edit seeds in Settings returns to Setup with the current seeds kept', async ({ page }) => {
