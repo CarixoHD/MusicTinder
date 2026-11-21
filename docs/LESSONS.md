@@ -34,3 +34,5 @@ Short lessons from building this product, written by Slopper when work needed fi
 - (milestone review) When a status value such as 'nosample' means several different things in the player, don't trigger new behaviour on it alone; check why it was emitted or keep separate state for 'waiting on lookup'.
 - (design review) Every selection in a form (picked seed, chip, toggle) must give visible feedback where the user's eye already is, not in a list below the fold.
 - (design review) A role=switch needs a visibly different on and off state (track fill, thumb position), not just a changed label.
+- (milestone review) A score adjustment that should only change order (popularity dampener, tie-breakers) must not feed a threshold such as the deck's `score >= 0` quality floor; test it at the deck level, not only through rank().
+- (milestone review) When a composed Catalog method changes its backend for one caller (Setup typing), check every other caller of that method (generation's genre anchors) and add a createCatalog-level test that covers them.
