@@ -135,6 +135,7 @@ button {
   grid-template-columns: repeat(2, 1fr);
   width: 100%;
   max-width: var(--layout-max);
+  min-height: var(--tabbar-height);
   padding: var(--space-1) var(--space-2) calc(env(safe-area-inset-bottom) + var(--space-1));
   transform: translateX(-50%);
   background: var(--bg-glass);
@@ -645,7 +646,7 @@ button {
 .card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding: 12px 12px 16px;
   border: 1px solid var(--border-hairline);
   border-radius: var(--radius-surface);
@@ -762,6 +763,8 @@ button {
 .sheet {
   width: 100%;
   max-width: var(--layout-max);
+  max-height: calc(100svh - var(--space-4));
+  overflow-y: auto;
   padding: var(--space-5) var(--space-4)
     calc(env(safe-area-inset-bottom) + var(--space-6));
   border-top: 1px solid var(--border-hairline);
@@ -858,6 +861,46 @@ button {
     background: var(--bg-canvas);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+
+  /* Setup uses the extra height: search and seeds on the left, the long genre
+     list on the right, so the first steps and Start stay above the fold. */
+  .screen--setup {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
+    column-gap: var(--space-6);
+    row-gap: var(--space-5);
+  }
+
+  .screen--setup > .screen__intro {
+    grid-column: 1 / -1;
+  }
+
+  .screen--setup > .setup__section:nth-of-type(1) {
+    grid-column: 1;
+  }
+
+  .screen--setup > .setup__section:nth-of-type(2) {
+    grid-column: 2;
+  }
+
+  /* The last step sits directly above the sticky Start button, so neither can
+     scroll out of view while the genre list runs long. */
+  .screen--setup > .setup__section:nth-of-type(3) {
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--tabbar-height) + 48px + env(safe-area-inset-bottom));
+    z-index: 9;
+    width: 100%;
+    max-width: var(--layout-max);
+    padding: 0 var(--space-4) var(--space-2);
+    transform: translateX(-50%);
+    background: var(--bg-canvas);
+  }
+
+  .screen--setup {
+    padding-bottom: calc(var(--space-9) + var(--space-10));
   }
 }
 
