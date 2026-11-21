@@ -6,6 +6,12 @@ const ALBUM_LIMIT = 3;
 const TRACK_LIMIT = 3;
 /** Liked artists are extra anchors, but seeds must keep the bulk of the iTunes budget. */
 export const LIKED_ANCHOR_LIMIT = 2;
+/**
+ * Related artists a fresh deck may hold for an iTunes token before it gives up
+ * and ends like any empty deck. Past this, a seed whose artists all miss would
+ * sit in "getting ready" for minutes.
+ */
+export const WAIT_ARTIST_LIMIT = 6;
 
 interface Anchor {
   /** Artist name used for catalog resolution/enrichment. */
@@ -49,12 +55,15 @@ export async function generateCandidates(
   let failures = 0;
   let lastError: unknown;
   let networkError: CatalogError | undefined;
+  /** A failure other than the app's own iTunes allowance: a real catalog problem. */
+  let hardFailure = false;
 
   const recordFailure = (error: unknown) => {
     // 'notfound' is the catalog answering "nothing there", not an outage.
     if (!(error instanceof CatalogError) || error.kind !== 'notfound') {
       failures += 1;
       lastError = error;
+      if (!(error instanceof CatalogError) || error.kind !== 'budget') hardFailure = true;
       if (error instanceof CatalogError && error.kind === 'network') networkError = error;
     }
   };
@@ -71,9 +80,12 @@ export async function generateCandidates(
   // A partial outage that leaves nothing to deal is still an outage: reporting
   // an empty deck would tell the listener their seeds are exhausted. A real
   // outage outranks a budget cool-down, which failed requests themselves cause.
+  // A deck that waited out its own cool-down and still found nothing is the
+  // exception: that is an empty deck, not the catalog being unreachable.
   const finish = (cards: Card[]): Card[] => {
     if (cards.length === 0 && failures > 0) {
       if (networkError) throw networkError;
+      if (options.waitForFirstCard === true && !hardFailure) return cards;
       throw lastError instanceof CatalogError ? lastError : new CatalogError('unknown', String(lastError));
     }
     return cards;
@@ -196,21 +208,32 @@ export async function generateCandidates(
   // Candidates the pool already holds need no enrichment this refill.
   const artists = [...related.values()].filter((card) => !options.poolCreatorKeys?.has(card.creatorKey));
 
+  const enrichCard = async (card: Card, waitForBudget: boolean): Promise<Card | undefined> => {
+    const enrichment = await attempt(() => catalog.enrichArtist(card.creator, { waitForBudget }));
+    return enrichment && enrichment.chips.length > 0 ? { ...card, chips: enrichment.chips } : undefined;
+  };
+
   // 4a. Artist cards: Deezer carries no genre, so iTunes supplies it. Every
   //     card needs one: an artist without chips has no ranking signal and no
   //     card content. An artist iTunes could not tag stays unseen, and a later
   //     refill retries it.
   if (cardType === 'artist') {
-    const tagged = await Promise.all(
-      artists.map(async (card, index): Promise<Card | undefined> => {
-        const waitForBudget = options.waitForFirstCard === true && index === 0;
-        const enrichment = await attempt(() => catalog.enrichArtist(card.creator, { waitForBudget }));
-        return enrichment && enrichment.chips.length > 0
-          ? { ...card, chips: enrichment.chips }
-          : undefined;
-      }),
-    );
-    return finish(tagged.filter((card): card is Card => card !== undefined));
+    // Wait out the cool-down until an artist is actually tagged, not for one
+    // fixed index: iTunes may not know the first related artist at all. Bounded,
+    // so a seed whose artists all miss ends like any empty deck; the rest then
+    // enrich in parallel without waiting.
+    const tagged: Card[] = [];
+    let index = 0;
+    if (options.waitForFirstCard === true) {
+      const bound = Math.min(artists.length, WAIT_ARTIST_LIMIT);
+      while (index < bound && tagged.length === 0) {
+        const card = await enrichCard(artists[index], true);
+        index += 1;
+        if (card) tagged.push(card);
+      }
+    }
+    const rest = await Promise.all(artists.slice(index).map((card) => enrichCard(card, false)));
+    return finish([...tagged, ...rest.filter((card): card is Card => card !== undefined)]);
   }
 
   // 4b. Album/song cards: enrich each related artist, then pull its releases,
@@ -223,7 +246,10 @@ export async function generateCandidates(
   const cards: Card[] = [];
   const included = new Set<string>();
   for (const [index, artistCard] of artists.entries()) {
-    const waitForBudget = options.waitForFirstCard === true && index === 0;
+    // Hold the deck for a token only while it has no card at all, so a first
+    // related artist iTunes cannot match does not cost the next ones their wait.
+    const waitForBudget =
+      options.waitForFirstCard === true && cards.length === 0 && index < WAIT_ARTIST_LIMIT;
     const enrichment = await attempt(() => catalog.enrichArtist(artistCard.creator, { waitForBudget }));
     if (!enrichment) continue;
     const chips = enrichment.chips.length > 0 ? enrichment.chips : artistCard.chips;
