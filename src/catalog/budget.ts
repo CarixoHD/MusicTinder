@@ -17,13 +17,18 @@ export function resetItunesBudget(): void {
   queue = Promise.resolve();
 }
 
-export function withItunesBudget<T>(empty: T, load: () => Promise<T>): Promise<T> {
+/**
+ * Spend one token for `load`; with fewer than `1 + reserve` tokens left (or none
+ * without a reserve) resolve `empty` at once. Background work passes a reserve so
+ * a burst of enrichment cannot starve the requests a visible card depends on.
+ */
+export function withItunesBudget<T>(empty: T, load: () => Promise<T>, reserve = 0): Promise<T> {
   const now = Date.now();
   // Lazy refill: no timer to leak, and fake timers can move the clock freely.
   tokens = Math.min(ITUNES_BUDGET, tokens + ((now - refilledAt) * ITUNES_BUDGET) / BUDGET_WINDOW_MS);
   refilledAt = now;
 
-  if (tokens < 1) return Promise.resolve(empty);
+  if (tokens < 1 + reserve) return Promise.resolve(empty);
   tokens -= 1;
 
   const result = queue.then(load);
