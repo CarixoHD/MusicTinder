@@ -370,7 +370,12 @@ export default function Discovery({ catalog: injected }: { catalog?: Catalog } =
       const card = deck.state.pool[0];
       if (!card) return;
       const now = performance.now();
-      const next = deck.commit({ card, reaction, elapsedMs: now - cardStartedAt.current });
+      // The card as shown: a like keeps the sample song it named.
+      const next = deck.commit({
+        card: withSample(card),
+        reaction,
+        elapsedMs: now - cardStartedAt.current,
+      });
       setState(next);
       cardStartedAt.current = now;
 

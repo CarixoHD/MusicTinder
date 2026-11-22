@@ -86,6 +86,31 @@ describe('store persistence', () => {
     expect(state.storageNotice).toBeNull();
   });
 
+  it('keeps an album’s release type and a sample title through a reload', async () => {
+    const store = await reloadStore();
+    const sampleLike: LikedItem = {
+      ...LIKED,
+      kind: 'album',
+      title: 'Discovery',
+      releaseType: 'EP',
+      sampleTitle: 'Night Bus',
+    };
+    store.getState().addLiked(sampleLike);
+
+    const reloaded = await reloadStore();
+
+    expect(reloaded.getState().liked).toEqual([sampleLike]);
+  });
+
+  it('drops an unknown release type from a like saved by another build', async () => {
+    writePersisted({ liked: [{ ...LIKED, releaseType: 'Mixtape' }] });
+
+    const store = await reloadStore();
+
+    expect(store.getState().liked).toEqual([LIKED]);
+    expect(store.getState().storageNotice).toBe(STORAGE_NOTICE);
+  });
+
   it('falls back to defaults for null or wrongly typed slices instead of crashing', async () => {
     writePersisted({ seeds: null, settings: {}, taste: 'nope', liked: {}, seen: 'it:track:1' });
 

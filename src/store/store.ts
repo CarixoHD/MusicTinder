@@ -1,7 +1,16 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist, type StateStorage } from 'zustand/middleware';
 import { CHIPS } from '../chips';
-import type { CardKind, Chip, LikedItem, Seed, SeedKind, Settings, TasteWeights } from '../types';
+import type {
+  CardKind,
+  Chip,
+  LikedItem,
+  ReleaseType,
+  Seed,
+  SeedKind,
+  Settings,
+  TasteWeights,
+} from '../types';
 
 export type Screen = 'setup' | 'discovery' | 'liked';
 
@@ -71,6 +80,7 @@ const isChip = (value: unknown): value is Chip => typeof value === 'string' && C
 
 const SEED_KINDS: readonly SeedKind[] = ['artist', 'album', 'genre'];
 const CARD_KINDS: readonly CardKind[] = ['artist', 'album', 'song'];
+const RELEASE_TYPES: readonly ReleaseType[] = ['Single', 'EP'];
 const MUSIC_APPS: readonly Settings['musicApp'][] = ['spotify', 'apple', 'ytmusic'];
 const THEMES: readonly Settings['theme'][] = ['system', 'dark', 'light'];
 
@@ -191,6 +201,13 @@ function readLiked(value: unknown, read: ReadReport): LikedItem | null {
   if (appleUrl !== undefined) item.appleUrl = appleUrl;
   const because = readOptionalString(value.because, read);
   if (because !== undefined) item.because = because;
+  const sampleTitle = readOptionalString(value.sampleTitle, read);
+  if (sampleTitle !== undefined) item.sampleTitle = sampleTitle;
+  const releaseType = readOptionalString(value.releaseType, read);
+  if (releaseType !== undefined) {
+    if (isOneOf(RELEASE_TYPES, releaseType)) item.releaseType = releaseType;
+    else read.recovered = true;
+  }
   return item;
 }
 
