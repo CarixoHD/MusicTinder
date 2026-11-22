@@ -1,13 +1,7 @@
-import { useState } from 'react';
-import { CHIPS, chipLabel } from '../../chips';
 import { useStore } from '../../store/store';
-import type { CardKind, Chip } from '../../types';
+import type { CardKind } from '../../types';
 import { Button } from '../Button';
-import { ChipToggle } from '../ChipToggle';
-import { SeedSearch } from '../components/SeedSearch';
-import { ArtworkPlaceholder, CloseIcon } from '../icons';
-
-const SETUP_CHIPS = CHIPS.filter((chip) => chip.id !== 'other');
+import { SeedEditor } from '../components/SeedEditor';
 
 const CARD_TYPES: readonly { id: CardKind; label: string }[] = [
   { id: 'artist', label: 'Artists' },
@@ -15,37 +9,12 @@ const CARD_TYPES: readonly { id: CardKind; label: string }[] = [
   { id: 'song', label: 'Songs' },
 ];
 
-const SEARCH_SCOPES: readonly { id: 'artist' | 'album'; label: string }[] = [
-  { id: 'artist', label: 'Artists' },
-  { id: 'album', label: 'Albums' },
-];
-
-const genreSeedId = (chip: Chip) => `genre:${chip}`;
-
 export default function Setup() {
   const seeds = useStore((state) => state.seeds);
-  const addSeed = useStore((state) => state.addSeed);
-  const removeSeed = useStore((state) => state.removeSeed);
   const cardType = useStore((state) => state.settings.cardType);
   const setSettings = useStore((state) => state.setSettings);
   const setScreen = useStore((state) => state.setScreen);
-  // Searching and what the deck deals are separate decisions: the scope only
-  // picks which catalog the field searches.
-  const [searchScope, setSearchScope] = useState<'artist' | 'album'>('artist');
 
-  const isChipSelected = (chip: Chip) =>
-    seeds.some((seed) => seed.id === genreSeedId(chip));
-
-  const toggleChip = (chip: Chip) => {
-    if (isChipSelected(chip)) {
-      removeSeed(genreSeedId(chip));
-      return;
-    }
-    addSeed({ id: genreSeedId(chip), kind: 'genre', name: chipLabel(chip), chips: [chip] });
-  };
-
-  // Genre chips are their own selection UI; the pills show the searched seeds.
-  const chosenSeeds = seeds.filter((seed) => seed.kind !== 'genre');
   const seedCount = seeds.length;
   const startLabel =
     seedCount === 0
@@ -63,67 +32,7 @@ export default function Setup() {
         </p>
       </div>
 
-      <section className="setup__section" aria-labelledby="setup-search-label">
-        <h2 id="setup-search-label" className="setup__label">
-          Add a seed
-        </h2>
-        <div className="segmented" role="radiogroup" aria-label="Search scope">
-          {SEARCH_SCOPES.map((scope) => (
-            <label key={scope.id} className="segmented__option">
-              <input
-                type="radio"
-                name="seed-scope"
-                value={scope.id}
-                checked={searchScope === scope.id}
-                onChange={() => setSearchScope(scope.id)}
-              />
-              <span>{scope.label}</span>
-            </label>
-          ))}
-        </div>
-        <SeedSearch type={searchScope} />
-
-        {chosenSeeds.length > 0 && (
-          <ul className="seed-pills" aria-label="Your seeds">
-            {chosenSeeds.map((seed) => (
-              <li key={seed.id} className="seed-pill">
-                <span className="seed-pill__thumb" aria-hidden="true">
-                  {seed.image ? (
-                    <img src={seed.image} alt="" width={24} height={24} />
-                  ) : (
-                    <ArtworkPlaceholder width={24} height={24} />
-                  )}
-                </span>
-                <span className="seed-pill__name">{seed.name}</span>
-                <button
-                  type="button"
-                  className="seed-pill__remove"
-                  aria-label={`Remove ${seed.name}`}
-                  onClick={() => removeSeed(seed.id)}
-                >
-                  <CloseIcon width={16} height={16} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="setup__section" aria-labelledby="setup-genres-label">
-        <h2 id="setup-genres-label" className="setup__label">
-          Genres you like
-        </h2>
-        <div className="chip-grid" role="group" aria-labelledby="setup-genres-label">
-          {SETUP_CHIPS.map((chip) => (
-            <ChipToggle
-              key={chip.id}
-              label={chip.label}
-              selected={isChipSelected(chip.id)}
-              onToggle={() => toggleChip(chip.id)}
-            />
-          ))}
-        </div>
-      </section>
+      <SeedEditor />
 
       {/* The last step, pinned above the tab bar: what to deal, then start. */}
       <div className="setup__footer">
