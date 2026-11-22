@@ -35,6 +35,7 @@ const ALBUM_HIT: SeedCandidate = {
   name: 'Ada Vale No. 1',
   creator: 'Ada Vale',
   year: 2019,
+  image: 'https://cdn.example.test/albums/91011.jpg',
   chips: ['electronic'],
 };
 
@@ -398,10 +399,24 @@ describe('SeedSearch', () => {
         kind: 'artist',
         name: 'Carpenter Brut',
         deezerArtistId: 4346304,
+        image: 'https://cdn-images.dzcdn.net/artist/4346304/250x250.jpg',
         chips: ['other'],
       },
     ]);
     expect(useStore.getState().seeds[0]?.itunesArtistId).toBeUndefined();
+  });
+
+  it('carries an album hit’s artwork onto the saved seed', async () => {
+    const catalog = new ScriptedCatalog(async () => [ALBUM_HIT]);
+    await mount(catalog, 'album');
+
+    await typeTerm('ada');
+    await advance(400);
+    button(/Ada Vale No\. 1/)?.click();
+
+    expect(useStore.getState().seeds).toMatchObject([
+      { id: 'it:album:91011', image: ALBUM_HIT.image },
+    ]);
   });
 
   it('shows the rate message for a refused album search and Retry runs it again', async () => {
