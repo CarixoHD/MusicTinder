@@ -426,6 +426,19 @@ describe('SeedSearch', () => {
     expect(container.textContent).not.toContain('Apple is limiting searches right now');
   });
 
+  it('shows Apple’s rate message with Retry for an iTunes 429 album search', async () => {
+    server.use(http.get(SEARCH, () => new HttpResponse(null, { status: 429 })));
+
+    await mount(createCatalog(), 'album');
+    await typeTerm('ada');
+    await advance(400);
+
+    expect(container.textContent).toContain('Apple is limiting searches right now');
+    expect(
+      [...container.querySelectorAll('button')].some((element) => element.textContent === 'Retry'),
+    ).toBe(true);
+  });
+
   it('holds an album search through an empty iTunes budget and shows results after a refill', async () => {
     server.use(
       http.get(SEARCH, () =>

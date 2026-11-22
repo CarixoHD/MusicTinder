@@ -29,6 +29,8 @@ export function SeedEditor() {
   const [searchScope, setSearchScope] = useState<'artist' | 'album'>('artist');
   const searchLabelId = useId();
   const genresLabelId = useId();
+  // Also unique so a second editor (the in-deck sheet) never joins this group.
+  const scopeName = useId();
 
   const isChipSelected = (chip: Chip) => seeds.some((seed) => seed.id === genreSeedId(chip));
 
@@ -54,7 +56,7 @@ export function SeedEditor() {
             <label key={scope.id} className="segmented__option">
               <input
                 type="radio"
-                name="seed-scope"
+                name={scopeName}
                 value={scope.id}
                 checked={searchScope === scope.id}
                 onChange={() => setSearchScope(scope.id)}
