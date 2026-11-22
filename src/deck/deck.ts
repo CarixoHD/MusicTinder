@@ -69,7 +69,7 @@ export interface Deck {
   setWildcards: (enabled: boolean) => void;
 }
 
-const likedFrom = (card: Card): LikedItem => ({
+const likedFrom = (card: Card, sampleTitle?: string): LikedItem => ({
   key: card.key,
   kind: card.kind,
   title: card.title,
@@ -77,8 +77,11 @@ const likedFrom = (card: Card): LikedItem => ({
   creatorKey: card.creatorKey,
   year: card.year,
   image: card.image,
+  // Only the deck's own card: a just-in-time sample URL is signed and expires.
   previewUrl: card.previewUrl,
   appleUrl: card.appleUrl,
+  releaseType: card.releaseType,
+  sampleTitle: sampleTitle ?? card.sampleTitle,
   chips: card.chips,
   because: card.because,
 });
@@ -250,7 +253,8 @@ export function createDeck(init: DeckInit): Deck {
     init.sink?.setTaste(taste);
     init.sink?.markSeen(current.key);
     if (reaction.reaction === 'like') {
-      init.sink?.addLiked(likedFrom(current));
+      // The visible card knows the sample song; the deck's own card does not.
+      init.sink?.addLiked(likedFrom(current, reaction.card.sampleTitle));
       rememberLiked(current);
     }
 

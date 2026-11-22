@@ -139,6 +139,10 @@ export interface LikedItem {
   image?: string;
   previewUrl?: string;
   appleUrl?: string;
+  /** Album only: Single or EP, carried over so the Liked row shows it like the card did. */
+  releaseType?: ReleaseType;
+  /** The sample song the card was showing when it was liked, when one was known. */
+  sampleTitle?: string;
   chips: Chip[];
   because?: string;
 }
