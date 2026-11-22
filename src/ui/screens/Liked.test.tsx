@@ -36,12 +36,14 @@ const SONG: LikedItem = {
 let container: HTMLDivElement;
 let root: Root;
 
-type Row = { title: string; detail: string; label: string };
+type Row = { title: string; detail: string; sample: string; tags: string[]; label: string };
 
 const rows = (): Row[] =>
   [...container.querySelectorAll('.liked-row-item')].map((row) => ({
     title: row.querySelector('.liked-row__title')?.textContent ?? '',
     detail: row.querySelector('.liked-row__creator')?.textContent ?? '',
+    sample: row.querySelector('.liked-row__sample')?.textContent ?? '',
+    tags: [...row.querySelectorAll('.tag')].map((tag) => tag.textContent ?? ''),
     label: row.querySelector('.liked-row')?.getAttribute('aria-label') ?? '',
   }));
 
@@ -97,5 +99,29 @@ describe('Liked row secondary line', () => {
     mount([{ ...ALBUM, creator: '' }]);
 
     expect(rowFor('Discovery').detail).toBe('Album · Electronic');
+  });
+
+  it('names the sample song on a quiet line of its own', () => {
+    mount([{ ...ARTIST, sampleTitle: 'Night Bus' }]);
+
+    expect(rowFor('Glass Harbour').sample).toBe('♪ Night Bus');
+    expect(rowFor('Glass Harbour').label).toContain('Night Bus');
+  });
+
+  it('shows a liked Single or EP as a tag, the way the card did', () => {
+    mount([{ ...ALBUM, releaseType: 'Single' }, { ...ALBUM, key: 'it:album:2', title: 'Remixes', releaseType: 'EP' }]);
+
+    expect(rowFor('Discovery').tags).toEqual(['Single']);
+    expect(rowFor('Remixes').tags).toEqual(['EP']);
+  });
+
+  it('leaves a like without a sample or release type exactly as it was', () => {
+    mount([ALBUM, ARTIST]);
+
+    for (const row of rows()) {
+      expect(row.sample).toBe('');
+      expect(row.tags).toEqual([]);
+    }
+    expect(rowFor('Discovery').label).toBe('Discovery, Album · Daft Punk, 2001, open in Spotify');
   });
 });

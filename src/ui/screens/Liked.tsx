@@ -72,7 +72,14 @@ function LikedRow({ item, musicApp, index }: { item: LikedItem; musicApp: MusicA
         href={buildLink(item, musicApp)}
         target="_blank"
         rel="noopener"
-        aria-label={[item.title, secondary, item.year, `open in ${APP_LABEL[musicApp]}`]
+        aria-label={[
+          item.title,
+          secondary,
+          item.sampleTitle,
+          item.year,
+          item.releaseType,
+          `open in ${APP_LABEL[musicApp]}`,
+        ]
           .filter((part) => part !== undefined)
           .join(', ')}
       />
@@ -81,8 +88,10 @@ function LikedRow({ item, musicApp, index }: { item: LikedItem; musicApp: MusicA
         <span className="liked-row__text">
           <span className="liked-row__title">{item.title}</span>
           <span className="liked-row__creator">{secondary}</span>
+          {item.sampleTitle && <span className="liked-row__sample">♪ {item.sampleTitle}</span>}
         </span>
         {item.year !== undefined && <span className="liked-row__year">{item.year}</span>}
+        {item.releaseType && <span className="tag">{item.releaseType}</span>}
         <ExternalLinkIcon />
       </span>
     </li>
