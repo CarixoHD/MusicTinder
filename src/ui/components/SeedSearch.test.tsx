@@ -246,9 +246,10 @@ describe('SeedSearch', () => {
     expect(status()).toBeNull();
   });
 
-  it('drops the previous term’s results as soon as the term changes', async () => {
+  it('drops the previous term’s results and no-match row while the new term is pending', async () => {
+    const pending = deferred<SeedCandidate[]>();
     const catalog = new ScriptedCatalog(async (term) =>
-      term === 'ada' ? [ARTIST_HIT] : [],
+      term === 'ada' ? [ARTIST_HIT] : term === 'zzz' ? [] : pending.promise,
     );
     await mount(catalog);
 
@@ -256,8 +257,61 @@ describe('SeedSearch', () => {
     await advance(400);
     expect(button(/Ada Vale/)).not.toBeNull();
 
+    // A newer term is pending: the old hits are gone (not merely hidden behind
+    // a click) and the loading row says the search is still running.
     await typeTerm('north');
     expect(button(/Ada Vale/)).toBeNull();
+    expect(container.querySelectorAll('.seed-result')).toHaveLength(0);
+    expect(status()).toContain('Searching');
+
+    // The same holds for a stale "no match" row.
+    await typeTerm('zzz');
+    await advance(400);
+    expect(container.textContent).toContain('No match for ‘zzz’');
+    await typeTerm('north');
+    expect(container.textContent).not.toContain('No match');
+    expect(container.querySelectorAll('.seed-result')).toHaveLength(0);
+    expect(status()).toContain('Searching');
+  });
+
+  it('falls back to the shared vinyl when a hit’s artwork fails to load', async () => {
+    const catalog = new ScriptedCatalog(async () => [ARTIST_HIT]);
+    await mount(catalog);
+
+    await typeTerm('ada');
+    await advance(400);
+    const thumb = button(/Ada Vale/)?.querySelector('.seed-result__thumb');
+    const image = thumb?.querySelector('img');
+    expect(image?.getAttribute('src')).toBe(ARTIST_HIT.image);
+
+    await act(async () => {
+      image?.dispatchEvent(new Event('error'));
+    });
+
+    expect(thumb?.querySelector('img')).toBeNull();
+    expect(thumb?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('a Deezer quota refusal never blames Apple and still offers Retry', async () => {
+    server.use(
+      http.get(SEARCH, () => new HttpResponse(null, { status: 429 })),
+    );
+    serveScripts(() => ({
+      error: { type: 'Exception', message: 'Quota limit exceeded', code: 4 },
+    }));
+
+    await mount(createCatalog(), 'artist');
+    await typeTerm('ada');
+    await advance(400);
+    await advance(0);
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Searches are limited',
+    );
+    expect(container.textContent).not.toContain('Apple');
+    expect(
+      [...container.querySelectorAll('button')].some((element) => element.textContent === 'Retry'),
+    ).toBe(true);
   });
 
   it('saves a picked Deezer artist at once, then fills its chips and iTunes id from enrichment', async () => {

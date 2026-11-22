@@ -159,6 +159,17 @@ describe('store persistence', () => {
     expect(store.getState().settings).toEqual(DEFAULTS.settings);
   });
 
+  it('loads a seed saved before artwork was carried, with no repair notice', async () => {
+    writePersisted({ seeds: [{ id: 'seed-old', kind: 'artist', name: 'Ada Vale', chips: ['electronic'] }] });
+
+    const store = await reloadStore();
+
+    expect(store.getState().seeds).toEqual([
+      { id: 'seed-old', kind: 'artist', name: 'Ada Vale', chips: ['electronic'] },
+    ]);
+    expect(store.getState().storageNotice).toBeNull();
+  });
+
   it('keeps valid saved entries and drops broken ones', async () => {
     writePersisted({ seeds: [SEED, { id: 42 }], liked: [LIKED, null], seen: ['it:track:1', 7] });
 
