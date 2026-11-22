@@ -21,13 +21,23 @@ const withoutTracking = (appleUrl: string): string => {
   }
 };
 
+/** Only a real https Apple Music entity link opens the store; anything else falls back. */
+const isAppleLink = (appleUrl: string): boolean => {
+  try {
+    const url = new URL(appleUrl);
+    return url.protocol === 'https:' && url.hostname === 'music.apple.com';
+  } catch {
+    return false;
+  }
+};
+
 /** One keyless https link per app; the OS routes it into the installed app. */
 export function buildLink(item: LinkItem, app: MusicApp): string {
   const q = encodeURIComponent(searchTerm(item));
 
   switch (app) {
     case 'apple':
-      return item.appleUrl
+      return item.appleUrl && isAppleLink(item.appleUrl)
         ? withoutTracking(item.appleUrl)
         : `https://music.apple.com/us/search?term=${q}`;
     case 'spotify':

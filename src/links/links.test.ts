@@ -50,6 +50,21 @@ describe('buildLink', () => {
     );
   });
 
+  it('ignores an appleUrl that is not an https music.apple.com link', () => {
+    const search = 'https://music.apple.com/us/search?term=Ada%20Vale%20No.%201%20Ada%20Vale';
+
+    expect(buildLink({ ...album, appleUrl: 'http://music.apple.com/us/album/x/1' }, 'apple')).toBe(
+      search,
+    );
+    expect(buildLink({ ...album, appleUrl: 'https://example.com/us/album/x/1' }, 'apple')).toBe(
+      search,
+    );
+    expect(
+      buildLink({ ...album, appleUrl: 'https://music.apple.com.example.test/us/album/x/1' }, 'apple'),
+    ).toBe(search);
+    expect(buildLink({ ...album, appleUrl: 'not a url' }, 'apple')).toBe(search);
+  });
+
   it('URL-encodes characters that would break a path or query', () => {
     const awkward: LinkItem = {
       kind: 'song',
