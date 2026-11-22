@@ -13,6 +13,19 @@ import { Button } from '../Button';
 import { ArtworkPlaceholder } from '../icons';
 
 const defaultCatalog = createCatalog();
+
+/**
+ * A search hit's or chosen seed's artwork; a missing or broken URL shows the
+ * shared token-coloured vinyl instead of a broken image.
+ */
+export function SeedArtwork({ src, size }: { src?: string; size: number }) {
+  const [isBroken, setIsBroken] = useState(false);
+  return src !== undefined && !isBroken ? (
+    <img src={src} alt="" onError={() => setIsBroken(true)} />
+  ) : (
+    <ArtworkPlaceholder width={size} height={size} />
+  );
+}
 const DEBOUNCE_MS = 400;
 /** One character matches too much to be worth a request. */
 const MIN_TERM_LENGTH = 2;
@@ -142,6 +155,10 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
   };
 
   const labels = { artist: 'artists', album: 'albums' };
+  // Artist searches are Deezer-first, so a rate refusal there may be Deezer's
+  // quota, not Apple's: only an album search (iTunes only) may name Apple.
+  const rateCopy =
+    type === 'album' ? 'Apple is limiting searches right now' : 'Searches are limited right now';
 
   return (
     <div className="seed-search">
@@ -183,11 +200,7 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
                   onClick={() => pick(candidate, seed)}
                 >
                   <span className="seed-result__thumb">
-                    {candidate.image ? (
-                      <img src={candidate.image} alt="" />
-                    ) : (
-                      <ArtworkPlaceholder width={22} height={22} />
-                    )}
+                    <SeedArtwork src={candidate.image} size={22} />
                   </span>
                   <span className="seed-result__text">
                     <span className="seed-result__name">{candidate.name}</span>
@@ -209,7 +222,7 @@ export function SeedSearch({ type, catalog = defaultCatalog }: SeedSearchProps) 
       {view.status === 'error' && (
         <div className="search-flag search-flag--error" role="alert">
           <span>
-            {view.kind === 'rate' ? 'Apple is limiting searches right now' : 'Couldn’t reach the catalog'}
+            {view.kind === 'rate' ? rateCopy : 'Couldn’t reach the catalog'}
           </span>
           <Button variant="secondary" onClick={() => setAttempt((count) => count + 1)}>
             Retry

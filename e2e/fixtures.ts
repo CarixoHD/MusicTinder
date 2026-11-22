@@ -69,6 +69,12 @@ const ANCHORS: readonly Anchor[] = [
 
 const artwork = (seed: string | number) => `https://cdn.example.test/art/${seed}.jpg`;
 
+/** One transparent pixel: the mocks' artwork URLs resolve instead of DNS-failing. */
+const ARTWORK_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+  'base64',
+);
+
 const artistResult = (anchor: Anchor) => ({
   wrapperType: 'artist',
   artistType: 'Artist',
@@ -334,6 +340,12 @@ export async function mockCatalog(page: Page, options: MockCatalogOptions = {}):
       body: `${callback}(${JSON.stringify(payload)});`,
     });
   });
+
+  // The fixture catalog points its artwork at cdn.example.test; serve it so a
+  // broken-image fallback is only exercised where a test breaks a URL on purpose.
+  await page.route('https://cdn.example.test/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'image/png', body: ARTWORK_PNG }),
+  );
 
   if (options.playAudio) {
     const wav = silentWav();
