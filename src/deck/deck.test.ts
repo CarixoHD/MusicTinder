@@ -823,6 +823,36 @@ describe('deck commit', () => {
     expect(sink.addLiked.mock.calls[0][0].previewUrl).toBe(current.previewUrl);
   });
 
+  it('does not repeat a song card’s own title as its sample', async () => {
+    const sink = { setTaste: vi.fn(), markSeen: vi.fn(), addLiked: vi.fn() };
+    const song: Card = {
+      key: 'it:song:88',
+      kind: 'song',
+      source: 'itunes',
+      title: 'Night Bus',
+      creator: 'Maker',
+      creatorKey: 'maker',
+      chips: ['pop'],
+    };
+    class SongCatalog extends FixedCatalog {
+      override async artistTopTracks(): Promise<Card[]> {
+        return [song];
+      }
+    }
+    const deck = createDeck({
+      catalog: new SongCatalog([artistCard(55, 'pop')]),
+      seeds: [ANCHOR],
+      cardType: 'song',
+      taste: initTaste([ANCHOR]),
+      sink,
+    });
+    await deck.refill();
+
+    deck.commit({ card: { ...deck.state.pool[0], sampleTitle: 'Night Bus' }, reaction: 'like', elapsedMs: 1000 });
+
+    expect(sink.addLiked.mock.calls[0][0].sampleTitle).toBeUndefined();
+  });
+
   it('carries an album card’s release type onto the like', async () => {
     const sink = { setTaste: vi.fn(), markSeen: vi.fn(), addLiked: vi.fn() };
     const single: Card = {

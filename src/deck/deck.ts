@@ -81,7 +81,8 @@ const likedFrom = (card: Card, sampleTitle?: string): LikedItem => ({
   previewUrl: card.previewUrl,
   appleUrl: card.appleUrl,
   releaseType: card.releaseType,
-  sampleTitle: sampleTitle ?? card.sampleTitle,
+  // A song card is its own sample; naming it again would repeat the title.
+  sampleTitle: card.kind === 'song' ? undefined : (sampleTitle ?? card.sampleTitle),
   chips: card.chips,
   because: card.because,
 });

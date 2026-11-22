@@ -75,13 +75,14 @@ test("liked album and song rows name their creator, and an artist row shows its 
   await expect(title).not.toHaveText(artist);
 
   await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Liked" }).click();
-  const albumRow = page.getByRole("link", { name: new RegExp(`^${album}, Album · Maker\\d+, 2015, open in Spotify$`) });
+  // The resolved sample song follows the detail line when the card had one.
+  const albumRow = page.getByRole("link", { name: new RegExp(`^${album}, Album · Maker\\d+(, [^,]+)?, 2015, open in Spotify$`) });
   await expect(albumRow).toBeVisible();
   await expect(page.getByText(/^Album · Maker\d+$/)).toBeVisible();
   const songRow = page.getByRole("link", { name: new RegExp(`^${song}, Song · Singer\\d+, 2012, open in Spotify$`) });
   await expect(songRow).toBeVisible();
   await expect(page.getByText(/^Song · Singer\d+$/)).toBeVisible();
-  const artistRow = page.getByRole("link", { name: new RegExp(`^${artist}, Artist · Jazz, open in Spotify$`) });
+  const artistRow = page.getByRole("link", { name: new RegExp(`^${artist}, Artist · Jazz(, [^,]+)?, open in Spotify$`) });
   await expect(artistRow).toBeVisible();
   await expect(page.getByText(`Artist · Jazz`, { exact: true })).toBeVisible();
 });
